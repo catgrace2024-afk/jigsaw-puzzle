@@ -1,0 +1,2004 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="パズル">
+<meta name="theme-color" content="#6b4b28">
+<meta name="description" content="木の机の上でピースを組み立てるジグソーパズル。">
+<meta name="robots" content="noindex, nofollow, noarchive, noimageindex">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>ジグソーパズル</title>
+<style>
+  :root{
+    --wood:#6b4b28; --cream:#f6f1e7; --ink:#3a2c1c;
+    --accent:#2a9d8f; --accent2:#e2a33c;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;overscroll-behavior:none;}
+  #stage,canvas,.rail,header{
+    -webkit-touch-callout:none;-webkit-user-select:none;user-select:none;
+  }
+  body{
+    background:var(--wood);color:var(--cream);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Yu Gothic UI",sans-serif;
+    display:flex;flex-direction:column;overflow:hidden;
+    padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+  }
+
+  header{
+    flex:0 0 auto;display:flex;align-items:center;gap:10px;
+    padding:7px 14px;background:rgba(38,26,14,.72);border-bottom:1px solid rgba(0,0,0,.35);
+  }
+  header h1{font-size:14px;margin:0;font-weight:700;letter-spacing:.06em;white-space:nowrap;opacity:.9;}
+  .stats{display:flex;gap:8px;margin-left:auto;}
+  .stat{
+    background:rgba(0,0,0,.28);border:1px solid rgba(255,255,255,.12);border-radius:999px;
+    padding:3px 12px;font-size:12px;display:flex;gap:6px;align-items:baseline;white-space:nowrap;
+  }
+  .stat b{font-size:14px;font-variant-numeric:tabular-nums;}
+  .stat span{opacity:.65;}
+
+  #stage{flex:1 1 auto;position:relative;min-height:0;}
+  canvas{display:block;width:100%;height:100%;touch-action:none;}
+
+  /* ---- 左サイドのツールバー ---- */
+  .rail{
+    position:absolute;left:10px;top:50%;transform:translateY(-50%);
+    display:flex;flex-direction:column;gap:6px;padding:6px;
+    background:rgba(252,250,246,.92);border-radius:14px;
+    box-shadow:0 6px 18px rgba(0,0,0,.3);
+  }
+  .rail button{
+    position:relative;width:42px;height:42px;border:0;border-radius:11px;
+    background:transparent;color:#4a3a26;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;transition:background .15s;
+  }
+  .rail button:hover{background:rgba(0,0,0,.07);}
+  .rail button.on{background:rgba(226,163,60,.28);color:#7a5312;}
+  .rail button svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .badge{
+    position:absolute;top:3px;right:3px;min-width:16px;height:16px;padding:0 4px;
+    border-radius:999px;background:var(--accent);color:#fff;
+    font-size:10px;font-weight:700;line-height:16px;text-align:center;
+  }
+
+  /* ---- パネル・オーバーレイ ---- */
+  .overlay{
+    position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+    background:rgba(30,20,10,.72);padding:18px;
+  }
+  .overlay.show{display:flex;}
+  .card{
+    background:var(--cream);color:var(--ink);border-radius:18px;padding:22px 24px;
+    max-width:380px;width:100%;box-shadow:0 18px 50px rgba(0,0,0,.45);text-align:center;
+  }
+  /* 絵をえらぶ画面は、開いた瞬間に画像が並ぶ全画面の一覧にする */
+  .overlay.sheet{background:var(--cream);padding:0;align-items:stretch;justify-content:stretch;}
+  .overlay.sheet .card{
+    max-width:none;width:100%;height:100%;border-radius:0;box-shadow:none;
+    padding:0;display:flex;flex-direction:column;text-align:left;background:var(--cream);
+  }
+  .sheethead{
+    flex:0 0 auto;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    /* 上の余白は body 側で safe-area を確保済みなので、ここでは足さない */
+    padding:14px 16px 8px;
+  }
+  .sheethead h2{margin:0;font-size:22px;flex:0 0 auto;}
+  .ver{
+    flex:1 1 auto;font-size:11px;color:#a2917a;align-self:flex-end;padding-bottom:4px;
+    font-variant-numeric:tabular-nums;
+  }
+  .sheethead .sub{width:100%;margin:0;font-size:12px;color:#8a7a63;}
+  .sheethead select{order:1;}
+  .sheethead .closeX{order:2;}
+  .sheethead .sub{order:3;}
+  /* 狭い画面では、見出しと×を1行目、難易度を2行目に置く */
+  @media (max-width:520px){
+    .sheethead{padding:12px 12px 6px;gap:8px;}
+    .sheethead h2{font-size:20px;order:0;}
+    .sheethead .closeX{order:0;}
+    .sheethead select{order:2;width:100%;}
+    .sheethead .sub{order:3;font-size:11px;}
+  }
+  .resume{
+    display:flex;align-items:center;gap:12px;width:calc(100% - 32px);margin:0 16px 12px;
+    padding:10px;border:2px solid var(--accent);border-radius:14px;background:#fff;
+    cursor:pointer;text-align:left;position:relative;
+  }
+  .resume img{width:76px;height:57px;object-fit:cover;border-radius:9px;flex:0 0 auto;background:#e9e1d3;}
+  .resume .txt{flex:1 1 auto;min-width:0;}
+  .resume b{display:block;font-size:14px;color:var(--accent);}
+  .resume small{display:block;font-size:12px;color:#7a6849;margin-top:2px;}
+  .resume .discard{
+    position:absolute;top:6px;right:8px;width:26px;height:26px;padding:0;border:0;
+    border-radius:50%;background:rgba(0,0,0,.06);color:#6b5b45;font-size:15px;line-height:26px;cursor:pointer;
+  }
+  .closeX{
+    width:36px;height:36px;border:0;border-radius:50%;background:rgba(0,0,0,.07);
+    color:#5a4a33;font-size:19px;line-height:36px;padding:0;cursor:pointer;
+  }
+  .empty{font-size:12px;color:#8a7a63;line-height:1.8;padding:18px 6px;}
+  .nexts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 14px;}
+  .gallery{
+    display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;
+    grid-auto-rows:minmax(120px,auto);        /* 行の高さを必ず確保する */
+    overflow-y:auto;overflow-x:hidden;
+    padding:2px 16px 20px;
+    flex:1 1 auto;min-height:0;align-content:start;
+    -webkit-overflow-scrolling:touch;
+  }
+  .nexts .gitem figcaption{padding:12px 6px 4px;}
+
+  /* 下部のタブバー */
+  .tabbar{
+    flex:0 0 auto;display:flex;background:#fffdf8;border-top:1px solid #e2d8c6;
+    /* ホームバー分の余白は body 側(padding-bottom)で確保済み。
+       ここで env をもう一度足すと下が二重に空いてしまうので足さない */
+    padding:10px 4px 8px;
+  }
+  /* タブが4つに増えても必ず1行に収まるよう、文字は折り返さず、
+     画面の幅に合わせて文字とアイコンが自動で縮む */
+  .tabbar button{
+    position:relative;flex:1 1 0;min-width:0;
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    background:none;border:0;padding:6px 2px;color:#8d7c62;cursor:pointer;
+    border-radius:12px;line-height:1.3;white-space:nowrap;
+    font-family:inherit;font-size:clamp(9px,2.7vw,11px);
+  }
+  .tabbar button svg{
+    width:clamp(19px,5.6vw,24px);height:clamp(19px,5.6vw,24px);
+    fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  #tabCarve[hidden]{display:none;}
+  #tabCarve .nu{
+    position:absolute;top:2px;left:calc(50% + 7px);width:8px;height:8px;border-radius:50%;
+    background:#d9534f;
+  }
+  /* 解放のお知らせ（完成カードの中） */
+  .unlock{
+    display:flex;align-items:center;gap:9px;text-align:left;
+    margin:0 0 14px;padding:11px 13px;border-radius:13px;
+    background:rgba(42,157,143,.12);border:1px solid var(--accent);
+  }
+  .unlock[hidden]{display:none;}
+  .unlock svg{width:24px;height:24px;flex:0 0 auto;fill:none;stroke:var(--accent);
+    stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
+  .unlock b{display:block;font-size:13px;color:var(--accent);}
+  .unlock small{display:block;font-size:11px;color:#6b5b45;margin-top:1px;}
+  .pcs{margin:0 0 14px;font-size:13px;color:#6b5b45;}
+  .pcs[hidden]{display:none;}
+  .pcs b{font-size:17px;color:var(--ink);font-variant-numeric:tabular-nums;}
+  .tabbar button.on{color:var(--accent);font-weight:700;}
+  .tabbar button:active{background:rgba(0,0,0,.05);}
+  .tabbar .count{
+    font-size:10px;background:#e7ddc9;color:#6b5b45;border-radius:999px;padding:1px 6px;
+  }
+  .tabbar button.on .count{background:var(--accent);color:#fff;}
+  .gitem{
+    position:relative;margin:0;padding:0;border-radius:16px;overflow:hidden;
+    background:#e4d9c6;cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.18);
+    display:block;line-height:0;transition:transform .12s;
+    min-width:0;max-width:100%;
+    /* 高さを必ず確保する（画像の読み込み前でもタイルが潰れないように）
+       aspect-ratio が使えない古い端末では min-height が効く */
+    min-height:120px; aspect-ratio:4/3;
+  }
+  .gitem:active{transform:scale(.96);}
+  /* 絵の全体が見えるように、切り取らず収める */
+  .gitem img{
+    position:absolute;top:0;left:0;width:100%;height:100%;
+    object-fit:contain;display:block;
+  }
+  .gitem figcaption{
+    position:absolute;left:0;right:0;bottom:0;padding:22px 9px 7px;
+    font-size:12px;line-height:1.4;color:#fff;text-align:left;
+    background:linear-gradient(to top,rgba(0,0,0,.70),rgba(0,0,0,.35) 45%,rgba(0,0,0,0));
+    text-shadow:0 1px 2px rgba(0,0,0,.5);
+  }
+  /* 選択中の枠は内側に描く（外にはみ出して隣と重ならないように） */
+  .gitem.sel{box-shadow:0 3px 10px rgba(0,0,0,.25);}
+  .gitem.sel::before{
+    content:'';position:absolute;top:0;left:0;right:0;bottom:0;
+    border:4px solid var(--accent2);border-radius:16px;pointer-events:none;z-index:2;
+  }
+  .gitem .del{
+    position:absolute;top:6px;left:6px;width:26px;height:26px;padding:0;
+    border:0;border-radius:50%;background:rgba(20,14,8,.62);color:#fff;
+    font-size:15px;line-height:26px;text-align:center;cursor:pointer;
+  }
+  /* 画面が狭いときは2列に固定して、1枚を大きく見せる（.gitem の後に置くこと） */
+  @media (max-width:520px){
+    .gallery{
+      grid-template-columns:repeat(2,minmax(0,1fr));grid-auto-rows:minmax(110px,auto);
+      gap:10px;padding-left:12px;padding-right:12px;
+    }
+    .gitem{min-height:110px;}
+  }
+  /* かなり狭い端末では1列にして、絵をはっきり見せる */
+  @media (max-width:340px){
+    .gallery{grid-template-columns:1fr;grid-auto-rows:minmax(150px,auto);}
+    .gitem{aspect-ratio:3/2;min-height:150px;}
+  }
+  .gitem .mine{
+    position:absolute;top:7px;right:7px;background:var(--accent);color:#fff;
+    font-size:10px;line-height:1;padding:4px 7px;border-radius:999px;font-weight:700;
+  }
+  .gitem.sel .mine{display:none;}
+  .addcard{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;
+    aspect-ratio:4/3;border:2px dashed #c3b49a;border-radius:16px;background:#fffdf8;
+    color:#7a6849;font-size:12px;cursor:pointer;text-align:center;padding:6px;line-height:1.5;
+  }
+  .addcard:active{transform:scale(.96);}
+  .addcard svg{width:26px;height:26px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;}
+  .gitem.sel::after{
+    content:'';position:absolute;top:7px;right:7px;width:22px;height:22px;border-radius:50%;z-index:3;
+    background:var(--accent) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'><path d='M5 12.5l4.5 4.5L19 7'/></svg>") center/15px no-repeat;
+  }
+  .card h2{margin:0 0 4px;font-size:20px;}
+  .card p{margin:4px 0 16px;font-size:13px;line-height:1.7;color:#6b5b45;}
+  .card .big{font-size:32px;font-weight:800;color:#b5761a;font-variant-numeric:tabular-nums;}
+  .row{display:flex;align-items:center;gap:8px;justify-content:center;margin:12px 0;flex-wrap:wrap;}
+  .row>label{font-size:12px;color:#6b5b45;}
+  select,.btn,button.act{
+    font-family:inherit;font-size:13px;background:#fff;color:var(--ink);
+    border:1px solid #d9cdb8;border-radius:10px;padding:8px 14px;cursor:pointer;
+  }
+  .btn.primary,button.act.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;}
+  input[type=file]{display:none;}
+  .thumbs{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;}
+  .thumb{width:74px;height:50px;border-radius:9px;overflow:hidden;border:3px solid transparent;cursor:pointer;padding:0;background:none;}
+  .thumb.sel{border-color:var(--accent2);}
+  .thumb img{width:100%;height:100%;object-fit:cover;display:block;}
+  .toast{
+    position:absolute;left:50%;top:14px;transform:translateX(-50%);
+    background:rgba(30,20,10,.86);color:#fff;font-size:12px;padding:7px 14px;border-radius:999px;
+    opacity:0;transition:opacity .25s;pointer-events:none;white-space:nowrap;
+  }
+  .toast.show{opacity:1;}
+  /* 端末を縦に向けたとき：ツールバーを上部に横並びにして盤面を広く取る */
+  @media (max-aspect-ratio: 1/1){
+    .rail{
+      left:50%;top:8px;bottom:auto;transform:translateX(-50%);
+      flex-direction:row;border-radius:999px;padding:5px 7px;gap:4px;
+    }
+  }
+  @media (max-width:600px){
+    header h1{display:none;}
+    header{padding:6px 10px;}
+    .rail button{width:40px;height:40px;}
+    .rail button svg{width:20px;height:20px;}
+    .card{padding:18px 16px;border-radius:16px;}
+    .card.wide{padding:14px 12px;}
+    .gallery{grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;}
+    .nexts{gap:6px;}
+    .row{gap:6px;}
+    select,.btn,button.act{padding:9px 12px;}
+  }
+  @media (max-aspect-ratio: 1/1) and (max-width:600px){
+    .rail{top:6px;}
+    .rail button{width:38px;height:38px;}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>ジグソーパズル</h1>
+  <div class="stats">
+    <div class="stat"><span>時間</span><b id="time">00:00</b></div>
+    <div class="stat"><span>完成</span><b id="prog">0 / 0</b></div>
+  </div>
+</header>
+
+<div id="stage">
+  <canvas id="cv"></canvas>
+
+  <div class="rail">
+    <button id="bNew" title="はじめから"><svg viewBox="0 0 24 24"><path d="M19 12H5"/><path d="M11 18l-6-6 6-6"/></svg></button>
+    <button id="bPause" title="タイマーを一時停止">
+      <svg viewBox="0 0 24 24" id="icPause"><rect x="7" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.4" y="5" width="3.6" height="14" rx="1.2"/></svg>
+      <svg viewBox="0 0 24 24" id="icPlay" style="display:none"><path d="M8 5.5l10 6.5-10 6.5z" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="bEdge" title="外周のピースだけ表示"><svg viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" stroke-dasharray="3 2.4"/><rect x="8.5" y="9.5" width="7" height="5" rx="1"/></svg></button>
+    <button id="bHint" title="ヒント"><svg viewBox="0 0 24 24"><path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5.9 1.2.9 1.9V17h5.2v-1.2c0-.7.3-1.4.9-1.9A6 6 0 0 0 12 3z"/></svg><span class="badge" id="hintN">3</span></button>
+    <button id="bPeek" title="お手本を見る"><svg viewBox="0 0 24 24"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg></button>
+    <button id="bPic" title="画像・難易度"><svg viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-5 4.5 4.5L16.5 14l3.5 3.5"/></svg></button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="overlay sheet show" id="ovSetup">
+    <div class="card">
+      <div class="sheethead">
+        <h2>絵をえらぶ</h2>
+        <span class="ver" id="ver"></span>
+        <select id="level" aria-label="難易度">
+          <option value="4">かんたん（約16）</option>
+          <option value="5" selected>ふつう（約25）</option>
+          <option value="6">やや難（約36）</option>
+          <option value="8">むずかしい（約64）</option>
+          <option value="10">上級（約100）</option>
+          <option value="12">達人（約150）</option>
+          <option value="17">超人（約300）</option>
+        </select>
+        <button class="closeX" id="bCloseSetup" title="閉じる" aria-label="閉じる" hidden>×</button>
+        <p class="sub">絵をタップするとパズルがはじまります。</p>
+      </div>
+      <input type="file" id="file" accept="image/*" multiple>
+      <button class="resume" id="bResume" hidden>
+        <img id="resumeThumb" alt="">
+        <span class="txt"><b>前回の続きから</b><small id="resumeInfo"></small></span>
+        <span class="discard" id="bDiscard" role="button" tabindex="0" title="続きを消す" aria-label="続きを消す">×</span>
+      </button>
+      <div class="gallery" id="gallery"></div>
+      <nav class="tabbar">
+        <button id="tabAll" class="on">
+          <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>
+          <span>絵をえらぶ</span><span class="count" id="cntAll">0</span>
+        </button>
+        <button id="tabCarve" hidden>
+          <span class="nu" id="tabNew"></span>
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="14" r="6.2"/><path d="M7.6 9.4L6.2 4.6l4.2 2.3"/><path d="M16.4 9.4l1.4-4.8-4.2 2.3"/><path d="M9.8 13.6h.01M14.2 13.6h.01"/></svg>
+          <span>彫りもの</span><span class="count" id="cntCarve">0</span>
+        </button>
+        <button id="tabMine">
+          <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2.5"/><circle cx="8.5" cy="10.5" r="1.7"/><path d="M4 17.5l5-5 4.5 4.5L16.5 14.5l3.5 3.5"/></svg>
+          <span>マイ写真</span><span class="count" id="cntMine">0</span>
+        </button>
+        <button id="tabAdd">
+          <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+          <span>写真を追加</span>
+        </button>
+      </nav>
+    </div>
+  </div>
+
+  <div class="overlay" id="ovClear">
+    <div class="card">
+      <h2 id="clearTitle">完成！ 🎉</h2>
+      <p style="margin-bottom:10px">タイム <span class="big" id="clearTime">00:00</span></p>
+      <div class="unlock" id="unlockBox" hidden>
+        <svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.6 6.1.7-4.5 4.1 1.2 6-5.3-3-5.3 3 1.2-6L3.4 9.3l6.1-.7z"/></svg>
+        <span><b id="unlockT"></b><small id="unlockS"></small></span>
+      </div>
+      <p class="pcs" id="clearPcs" hidden>完成ピース <b id="clearN">0</b> 枚</p>
+      <div class="row" style="margin:0 0 12px" id="clearLevelRow">
+        <label>次の難易度</label>
+        <select id="levelClear"></select>
+      </div>
+      <p style="margin:0 0 6px;font-weight:700;color:var(--ink);font-size:13px"
+         id="clearPick">次のパズルを選択してください</p>
+      <div class="nexts" id="nexts"></div>
+      <div class="row" style="margin:0;gap:8px">
+        <button class="act" id="bSame" style="flex:1">同じ絵をもう一度</button>
+        <button class="act primary" id="bMore" style="flex:1">他のパズル</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- パズルに使う絵の一覧。本体より先に読み込む -->
+<script src="images.js"></script>
+<!-- 彫りもの（ボーナスステージ）のデータ -->
+<script src="carve.js"></script>
+<script>
+(() => {
+'use strict';
+
+// ============================================================
+//  設定
+// ============================================================
+// 最初から入っている絵（images.js で定義）
+const MP = window.MY_PHOTOS || {FOLDER:'', FILES:[]};
+const BUILTIN = MP.FILES.map(([f,n])=>({name:n, src:encodeURI(MP.FOLDER+f)}));
+const MAX_PX = 1400;       // 取り込む画像の長辺（最初の16枚と同じ基準）
+const APP_VERSION = 'v27'; // 画面右上に出る版数。sw.js の VERSION と合わせること
+const LEVEL_DEFAULT = '5';  // 初期の難易度（ふつう＝約25ピース）。#level の選択肢の値と合わせる
+const SNAP_RATIO = 0.42;   // 吸着距離（ピース短辺に対する割合）
+const TAB_MARGIN = 0.34;   // タブの飛び出しぶんの余白
+const ZOOM_MAX    = 3;     // 盤面を広げられる上限（3倍まで）
+const SCATTER_GAP = 0.80;  // 机に散らすときのピースの間隔（1.0で重なりなし）
+const HINTS_MAX  = 3;
+
+// ---- 彫りもの（ボーナスステージ）----
+// 絵ごとに決まった難易度をクリアすると、その絵が解放される。
+//   上級（約100）→ 木のねこ ／ 達人（約150）→ 桜のプードル ／ 超人（約300）→ ミュシャ
+// どの難易度で解放されるかは carve.js の unlock に入っている。
+const CB = window.CARVE || {BOX:1000, BOARDS:[]};
+const CARVE_KEY = 'jigsaw-carve';     // 解放ずみの絵の保存先
+let carve=null;                       // 彫りものを遊んでいるときだけ、その盤面
+let carveGot=[];                      // 解放ずみの絵のキー
+let carveNew=false;                   // 新しく解放された印（赤い点）
+const carveOpenList = () => CB.BOARDS.filter(b=>carveGot.indexOf(b.key)>=0);
+const carveOpen = () => carveOpenList().length;
+const carveList = () => carveOpenList().map(b=>(
+  {name:b.name, src:b.src, carve:b.key, sub:b.sub, n:b.n}));
+function loadClears(){
+  carveGot=[];
+  try{
+    const v=localStorage.getItem(CARVE_KEY);
+    if(v){
+      const a=JSON.parse(v);
+      if(Array.isArray(a)) carveGot=a.filter(k=>CB.BOARDS.some(b=>b.key===k));
+      else if(typeof a==='number')            // 前の形（回数）から移し替える
+        carveGot=CB.BOARDS.slice(0,a).map(b=>b.key);
+    }
+  }catch(_){ carveGot=[]; }
+}
+function saveClears(){
+  try{ localStorage.setItem(CARVE_KEY, JSON.stringify(carveGot)); }catch(_){}
+}
+const GLOW_MS    = 750;    // 塊がふわっと光る時間
+
+// タブ形状（t=辺方向, n=法線方向 / t=0.5 について左右対称）
+const SEGS = [
+  [0.15, 0.00, 0.25, 0.00, 0.36, 0.00],
+  [0.44, 0.02, 0.30, 0.12, 0.35, 0.20],
+  [0.40, 0.30, 0.60, 0.30, 0.65, 0.20],
+  [0.70, 0.12, 0.56, 0.02, 0.64, 0.00],
+  [0.75, 0.00, 0.85, 0.00, 1.00, 0.00],
+];
+
+// ============================================================
+//  DOM
+// ============================================================
+const cv=document.getElementById('cv'), ctx=cv.getContext('2d'), stage=document.getElementById('stage');
+const elTime=document.getElementById('time'), elProg=document.getElementById('prog');
+const elLevel=document.getElementById('level'), elGallery=document.getElementById('gallery');
+const ovSetup=document.getElementById('ovSetup'), ovClear=document.getElementById('ovClear');
+const elHintN=document.getElementById('hintN'), elToast=document.getElementById('toast');
+const hitCtx=document.createElement('canvas').getContext('2d');
+
+// ============================================================
+//  状態
+// ============================================================
+let img=null;
+let userPhotos=[];                                   // 端末から取り込んだ写真
+const list=()=>userPhotos.concat(BUILTIN);
+let imgSrc=(BUILTIN[0]||{src:''}).src;
+let pieces=[], tray=[];                       // tray = まだ置いていないピース（後ろほど手前に描く）
+let board={x:0,y:0,w:0,h:0,pw:0,ph:0};
+let table={w:0,h:0};                          // 机の広さ（盤面より広い）
+let slotList=[], slotStep={x:0,y:0};          // 机の上のピース置き場の候補と間隔
+let cols=4, rows=4, tabM=0;
+let woodLayer=null, boardLayer=null;
+let playing=false, cleared=false, peek=false, edgeOnly=false, paused=false;
+let hints=HINTS_MAX, hintCell=null, hintUntil=0;
+let startTime=0, elapsed=0, timerId=null;
+let drag=null, glows=[];
+let panView=null;                             // 1本指で机を動かしているときの情報
+let returning=[];                             // 置けずに元の場所へ戻っている途中のピース
+let tour=null;                                // 完成したあとの見せる演出
+let W=0, H=0, dpr=1, rafId=0;
+let zoom={s:1, ox:0, oy:0};          // 盤面の拡大率と位置
+let renderedScale=1;                 // いまピースを焼いてある倍率
+const pointers=new Map();            // いま触れている指
+let pinch=null;                      // 2本指の操作中の情報
+let lastTapT=0, lastTapX=0, lastTapY=0;
+
+// 端末の向き。縦向きではツールバーが上部に移動する（CSS と対応）
+const portrait = () => H > W;
+const RAIL_W = () => (W < 600 ? 50 : 66);   // 横向き：左に確保する幅
+const RAIL_H = () => (W < 600 ? 52 : 62);   // 縦向き：上に確保する高さ
+
+// ============================================================
+//  ユーティリティ
+// ============================================================
+const fmt=ms=>{const s=Math.floor(ms/1000);
+  return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');};
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=(v,a,b)=>Math.min(Math.max(v,a),b);
+
+function loadImage(src){
+  return new Promise((res,rej)=>{const i=new Image();
+    i.onload=()=>res(i); i.onerror=()=>rej(new Error('画像を読み込めませんでした')); i.src=src;});
+}
+let toastId=null;
+function toast(msg){
+  elToast.textContent=msg; elToast.classList.add('show');
+  clearTimeout(toastId); toastId=setTimeout(()=>elToast.classList.remove('show'),1600);
+}
+
+function resizeCanvas(){
+  const r=stage.getBoundingClientRect();
+  W=Math.max(1,Math.floor(r.width)); H=Math.max(1,Math.floor(r.height));
+  dpr=Math.min(window.devicePixelRatio||1,2.5);
+  cv.width=Math.floor(W*dpr); cv.height=Math.floor(H*dpr);
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  // 焼いたピースを盤面用に縮めて描くので、縮小の画質を上げておく
+  // （canvas は大きさを変えると設定が戻るため、ここで毎回入れ直す）
+  ctx.imageSmoothingQuality='high';
+}
+
+// ============================================================
+//  木の机のテクスチャ
+// ============================================================
+function makeWood(){
+  const oc=document.createElement('canvas');
+  oc.width=Math.ceil(W*dpr); oc.height=Math.ceil(H*dpr);
+  const o=oc.getContext('2d'); o.setTransform(dpr,0,0,dpr,0,0);
+
+  const g=o.createLinearGradient(0,0,W*0.3,H);
+  g.addColorStop(0,'#b9884f'); g.addColorStop(0.5,'#a97740'); g.addColorStop(1,'#8d6132');
+  o.fillStyle=g; o.fillRect(0,0,W,H);
+
+  // 木目（横方向の細い縞）
+  let seed=20250803;
+  const rr=()=>{seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff;};
+  for(let i=0;i<Math.ceil(H/2.2);i++){
+    const y=i*2.2+rr()*1.6;
+    const a=0.03+rr()*0.07;
+    o.strokeStyle=(rr()<0.5?'rgba(60,36,14,':'rgba(226,190,140,')+a+')';
+    o.lineWidth=0.6+rr()*1.5;
+    o.beginPath(); o.moveTo(0,y);
+    let cy=y;
+    for(let x=0;x<=W;x+=60){ cy=y+Math.sin((x+i*37)/150)*2.2+ (rr()-0.5)*1.2; o.lineTo(x,cy); }
+    o.stroke();
+  }
+  // 板の継ぎ目
+  o.strokeStyle='rgba(50,30,12,.28)'; o.lineWidth=1.6;
+  for(let y=Math.round(H*0.18); y<H; y+=Math.round(H*0.34)){
+    o.beginPath(); o.moveTo(0,y+0.5); o.lineTo(W,y+0.5); o.stroke();
+  }
+  // 四隅を落として奥行きを出す
+  const v=o.createRadialGradient(W/2,H/2,Math.min(W,H)*0.25,W/2,H/2,Math.max(W,H)*0.72);
+  v.addColorStop(0,'rgba(0,0,0,0)'); v.addColorStop(1,'rgba(0,0,0,.34)');
+  o.fillStyle=v; o.fillRect(0,0,W,H);
+  woodLayer=oc;
+}
+
+// ============================================================
+//  ピース形状
+// ============================================================
+// ---- 彫りもの：ピースの形は carve.js の 0..1000 の箱の座標で入っている ----
+// パス文字列から、おおよその外枠を求める（制御点も含むので少し大きめ）
+function pathBox(d){
+  const v=d.match(/-?\d+(?:\.\d+)?/g)||[];
+  let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(let i=0;i+1<v.length;i+=2){
+    const x=+v[i], y=+v[i+1];
+    if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y;
+  }
+  return {x:x0,y:y0,w:Math.max(1,x1-x0),h:Math.max(1,y1-y0)};
+}
+// 0..1000 の箱の形を、ピースのキャンバスの座標へ移した Path2D にする
+function carvePath(p){
+  const k=carve.k, q=new Path2D();
+  q.addPath(new Path2D(p.d), {a:k,b:0,c:0,d:k, e:tabM-p.bx*k, f:tabM-p.by*k});
+  return q;
+}
+// 彫りものピースを焼く。切り口は焼き跡の細い線を内側にだけ入れる。
+function renderCarvePiece(p){
+  const rs=renderedScale, k=carve.k;
+  const oc=document.createElement('canvas');
+  oc.width=Math.ceil(p.cw*dpr*rs); oc.height=Math.ceil(p.ch*dpr*rs);
+  const o=oc.getContext('2d'); o.setTransform(dpr*rs,0,0,dpr*rs,0,0);
+  o.imageSmoothingQuality='high';
+  o.save(); o.clip(p.path);
+  o.translate(tabM-p.bx*k, tabM-p.by*k); o.scale(k,k);
+  o.drawImage(img, carve.ix, carve.iy, carve.iw, carve.ih);
+  o.restore();
+  o.save(); o.clip(p.path);                       // 内側だけに焼き跡
+  o.lineWidth=Math.max(1.2, carve.unit*k*0.052);
+  o.strokeStyle='rgba(60,38,16,.40)'; o.stroke(p.path);
+  o.restore();
+  p.canvas=oc;
+}
+// 盤面に彫っておくピースの形（変わり型は少し太く）
+function renderCarveBoardLayer(){
+  const k=carve.k, bb=carve.bb;
+  const oc=document.createElement('canvas');
+  oc.width=Math.ceil(board.w*dpr)+2; oc.height=Math.ceil(board.h*dpr)+2;
+  const o=oc.getContext('2d'); o.setTransform(dpr,0,0,dpr,0,0);
+  o.translate(-bb[0]*k, -bb[1]*k); o.scale(k,k);
+  o.lineJoin='round';
+  o.lineWidth=Math.max(0.5, carve.unit*0.016); o.strokeStyle='rgba(60,40,20,.22)';
+  for(const q of pieces) if(!q.w) o.stroke(new Path2D(q.d));
+  o.lineWidth=Math.max(0.8, carve.unit*0.026); o.strokeStyle='rgba(60,40,20,.34)';
+  for(const q of pieces) if(q.w) o.stroke(new Path2D(q.d));
+  boardLayer=oc;
+}
+
+function edgeTo(path,ax,ay,bx,by,s,h){
+  const dx=bx-ax, dy=by-ay, nx=dy, ny=-dx;
+  const P=(t,n)=>{n*=s*h; return [ax+dx*t+nx*n, ay+dy*t+ny*n];};
+  for(const g of SEGS){
+    const c1=P(g[0],g[1]), c2=P(g[2],g[3]), p=P(g[4],g[5]);
+    path.bezierCurveTo(c1[0],c1[1],c2[0],c2[1],p[0],p[1]);
+  }
+}
+let vSign=[],hSign=[],vH=[],hH=[];
+function buildPath(r,c){
+  const pw=board.pw, ph=board.ph, x=tabM, y=tabM, p=new Path2D();
+  p.moveTo(x,y);
+  r===0        ? p.lineTo(x+pw,y)    : edgeTo(p,x,y,x+pw,y,-hSign[r][c],hH[r][c]);
+  c===cols-1   ? p.lineTo(x+pw,y+ph) : edgeTo(p,x+pw,y,x+pw,y+ph,vSign[r][c+1],vH[r][c+1]);
+  r===rows-1   ? p.lineTo(x,y+ph)    : edgeTo(p,x+pw,y+ph,x,y+ph,hSign[r+1][c],hH[r+1][c]);
+  c===0        ? p.lineTo(x,y)       : edgeTo(p,x,y+ph,x,y,-vSign[r][c],vH[r][c]);
+  p.closePath();
+  return p;
+}
+function renderPiece(p){
+  const cw=board.pw+tabM*2, ch=board.ph+tabM*2;
+  // トレイではピースを拡大して表示するので、その大きさで焼いておく。
+  // 盤面の大きさで焼いた絵を引き伸ばすと「縮小 → 拡大」の二度手間になり、
+  // ピースが多いときに目立って荒くなる。
+  const rs=renderedScale;
+  const oc=document.createElement('canvas');
+  oc.width=Math.ceil(cw*dpr*rs); oc.height=Math.ceil(ch*dpr*rs);
+  const o=oc.getContext('2d'); o.setTransform(dpr*rs,0,0,dpr*rs,0,0);
+  o.imageSmoothingQuality='high';
+  o.save(); o.clip(p.path);
+  o.drawImage(img, tabM-p.col*board.pw, tabM-p.row*board.ph, board.w, board.h);
+  // 縁の太さはピースの大きさに比例させる。
+  // 固定の太さにすると、ピースが小さいほど相対的に太く見えてしまう。
+  const u=Math.max(board.pw,board.ph);
+  o.lineWidth=Math.max(0.35,u*0.034); o.strokeStyle='rgba(0,0,0,.22)'; o.stroke(p.path);
+  o.restore();
+  o.lineWidth=Math.max(0.18,u*0.013); o.strokeStyle='rgba(255,255,255,.50)'; o.stroke(p.path);
+  p.canvas=oc; p.cw=cw; p.ch=ch;
+}
+function renderBoardLayer(){
+  const oc=document.createElement('canvas');
+  oc.width=Math.ceil(board.w*dpr)+2; oc.height=Math.ceil(board.h*dpr)+2;
+  const o=oc.getContext('2d'); o.setTransform(dpr,0,0,dpr,0,0);
+  o.lineWidth=Math.max(0.3,Math.max(board.pw,board.ph)*0.014);
+  o.strokeStyle='rgba(60,40,20,.13)';
+  for(const p of pieces){
+    o.save(); o.translate(p.col*board.pw-tabM, p.row*board.ph-tabM); o.stroke(p.path); o.restore();
+  }
+  boardLayer=oc;
+}
+
+// ============================================================
+//  レイアウト
+// ============================================================
+function chooseGrid(level){
+  const a=Math.sqrt(img.width/img.height);
+  cols=Math.max(2,Math.round(level*a));
+  rows=Math.max(2,Math.round(level/a));
+}
+function layout(){
+  if(!img) return;
+  const pt=portrait();
+  const padL = pt ? 10 : RAIL_W();
+  const padT = pt ? RAIL_H() : 0;
+  const availW = W - padL - (pt?10:16);
+  const availH = H - padT - 14;
+
+  if(carve){
+    // 彫りもの：盤面は絵の形。0..1000 の箱のうち bb の部分を画面に合わせる
+    const bb=carve.bb;
+    const k=Math.min(availW*(pt?0.94:0.90)/bb[2], availH*(pt?0.94:0.90)/bb[3]);
+    carve.k=k;
+    board={ x:0, y:0, w:bb[2]*k, h:bb[3]*k, pw:carve.unit*k, ph:carve.unit*k };
+    tabM=Math.ceil(Math.max(3, carve.unit*k*0.10));
+    buildTable();
+    board.x=Math.round((table.w-board.w)/2);
+    board.y=Math.round((table.h-board.h)/2);
+    carve.tx=board.x-bb[0]*k; carve.ty=board.y-bb[1]*k;
+    carve.bpath=new Path2D();
+    carve.bpath.addPath(new Path2D(carve.board),
+                        {a:k,b:0,c:0,d:k, e:carve.tx, f:carve.ty});
+    for(const q of pieces){ q.cw=q.bw*k+tabM*2; q.ch=q.bh*k+tabM*2; }
+    makeWood();
+    return;
+  }
+
+  const s=Math.min(availW*(pt?0.98:0.94)/img.width, availH*(pt?0.98:0.94)/img.height);
+  const bw=Math.max(cols,Math.floor(img.width*s/cols)*cols);
+  const bh=Math.max(rows,Math.floor(img.height*s/rows)*rows);
+  board={ x:0, y:0, w:bw, h:bh, pw:bw/cols, ph:bh/rows };
+  tabM=Math.ceil(TAB_MARGIN*Math.max(board.pw,board.ph));
+  buildTable();                       // 机の広さと、ピースを置ける場所を決める
+  board.x=Math.round((table.w-board.w)/2);
+  board.y=Math.round((table.h-board.h)/2);
+  makeWood();
+}
+const targetPos=p=> carve
+  ? { x:carve.tx+p.bx*carve.k, y:carve.ty+p.by*carve.k }
+  : { x:board.x+p.col*board.pw, y:board.y+p.row*board.ph };
+const isEdgePiece=p=> carve ? !!p.e
+  : (p.row===0||p.col===0||p.row===rows-1||p.col===cols-1);
+
+// ============================================================
+//  机の上の「かたまり」（くっついたピースの集まり）
+//  同じ gid のピースが1つのかたまり。gsz はその枚数。
+// ============================================================
+let pieceMap=new Map();
+const pieceAt=(r,c)=>pieceMap.get(r+','+c);
+const groupOf=p=>tray.filter(q=>q.gid===p.gid);
+function setGroup(list,gid){ for(const q of list){ q.gid=gid; q.gsz=list.length; } }
+function resetGroups(){
+  pieceMap=new Map(pieces.map(p=>[p.row+','+p.col,p]));
+  let g=0; for(const p of pieces){ p.gid=g++; p.gsz=1; }
+}
+// かたまりの中の位置を、ずれがたまらないよう格子どおりに揃え直す
+function normalizeGroups(){
+  if(carve) return;                 // 彫りものはピースがくっつかない
+  const seen=new Set();
+  for(const p of tray){
+    if(seen.has(p.gid)) continue;
+    seen.add(p.gid);
+    for(const q of tray) if(q.gid===p.gid && q!==p){
+      q.x=p.x+(q.col-p.col)*board.pw;
+      q.y=p.y+(q.row-p.row)*board.ph;
+    }
+  }
+}
+// 保存データから戻したときに、位置関係を見てかたまりを組み直す
+function rebuildGroups(){
+  if(carve) return;                 // 彫りものはピースがくっつかない
+  const eps=Math.max(1, Math.min(board.pw,board.ph)*0.15);
+  let changed=true;
+  while(changed){
+    changed=false;
+    for(const p of tray){
+      for(const [dr,dc] of [[1,0],[0,1]]){
+        const n=pieceAt(p.row+dr,p.col+dc);
+        if(!n||n.placed||n.gid===p.gid) continue;
+        if(Math.abs((n.x-p.x)-dc*board.pw)<eps && Math.abs((n.y-p.y)-dr*board.ph)<eps){
+          const from=Math.max(p.gid,n.gid), to=Math.min(p.gid,n.gid);
+          for(const q of tray) if(q.gid===from) q.gid=to;
+          changed=true;
+        }
+      }
+    }
+  }
+  const cnt=new Map();
+  for(const p of tray) cnt.set(p.gid,(cnt.get(p.gid)||0)+1);
+  for(const p of tray) p.gsz=cnt.get(p.gid);
+  normalizeGroups();
+  const seen=new Set();
+  for(const p of tray){ if(seen.has(p.gid)) continue; seen.add(p.gid); clampGroup(groupOf(p)); }
+}
+// かたまりを机の中に収める
+function clampGroup(list){
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  for(const q of list){
+    minX=Math.min(minX,q.x-tabM); minY=Math.min(minY,q.y-tabM);
+    maxX=Math.max(maxX,q.x-tabM+q.cw); maxY=Math.max(maxY,q.y-tabM+q.ch);
+  }
+  let dx=0, dy=0;
+  if(minX<0) dx=-minX; else if(maxX>table.w) dx=table.w-maxX;
+  if(minY<0) dy=-minY; else if(maxY>table.h) dy=table.h-maxY;
+  if(dx||dy) for(const q of list){ q.x+=dx; q.y+=dy; }
+}
+// くっつく相手をさがす。見つかれば、ずらす量を返す
+function findJoin(list){
+  const set=new Set(list); let best=null;
+  for(const p of list){
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const n=pieceAt(p.row+dr,p.col+dc);
+      if(!n||n.placed||set.has(n)) continue;
+      const wx=n.x-dc*board.pw, wy=n.y-dr*board.ph;   // p がいるべき位置
+      const d=Math.hypot(p.x-wx,p.y-wy);
+      if(d<snapDist() && (!best||d<best.d)) best={d, dx:wx-p.x, dy:wy-p.y, other:n};
+    }
+  }
+  return best;
+}
+// かたまり同士をくっつける（連鎖してくっつくこともある）
+function joinGroups(list){
+  let joined=false;
+  for(let pass=0; pass<8; pass++){
+    const j=findJoin(list);
+    if(!j) break;
+    for(const q of list){ q.x+=j.dx; q.y+=j.dy; }
+    const merged=list.concat(groupOf(j.other));
+    setGroup(merged, Math.min(list[0].gid, j.other.gid));
+    list=merged; joined=true;
+  }
+  if(joined){ normalizeGroups(); clampGroup(list); return list; }
+  return null;
+}
+// かたまりの外枠（絵の出ている範囲）
+function groupBox(list){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const q of list){
+    x0=Math.min(x0,q.x-tabM); y0=Math.min(y0,q.y-tabM);
+    x1=Math.max(x1,q.x-tabM+q.cw); y1=Math.max(y1,q.y-tabM+q.ch);
+  }
+  return {x0,y0,x1,y1};
+}
+// かたまりが盤面に重なっているか
+function groupOverlapsBoard(list){
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(const q of list){
+    x0=Math.min(x0,q.x); y0=Math.min(y0,q.y);
+    x1=Math.max(x1,q.x+board.pw); y1=Math.max(y1,q.y+board.ph);
+  }
+  return x1>board.x && x0<board.x+board.w && y1>board.y && y0<board.y+board.h;
+}
+// 盤面に乗ってしまったかたまりを、いちばん近い外側へどける
+function pushOffBoard(list){
+  const b=groupBox(list), gap=4;
+  const cand=[
+    {dx:0, dy:(board.y-gap)-b.y1},              // 上へ
+    {dx:0, dy:(board.y+board.h+gap)-b.y0},      // 下へ
+    {dx:(board.x-gap)-b.x1, dy:0},              // 左へ
+    {dx:(board.x+board.w+gap)-b.x0, dy:0}       // 右へ
+  ].filter(c=> b.x0+c.dx>=0 && b.x1+c.dx<=table.w && b.y0+c.dy>=0 && b.y1+c.dy<=table.h)
+   .sort((a,b2)=>Math.hypot(a.dx,a.dy)-Math.hypot(b2.dx,b2.dy));
+  if(!cand.length) return false;
+  for(const q of list){ q.x+=cand[0].dx; q.y+=cand[0].dy; }
+  return true;
+}
+// 画面の縦横が変わったあと、はみ出したり盤面に乗ったかたまりを収め直す
+function relocateGroups(){
+  const seen=new Set(), free=slotList.slice();
+  for(const p of tray){
+    if(seen.has(p.gid)) continue;
+    seen.add(p.gid);
+    const list=groupOf(p);
+    clampGroup(list);                          // まず机の中へ
+    if(!groupOverlapsBoard(list)) continue;
+    if(pushOffBoard(list)) continue;            // 近い外側へどける
+    // どけられなければ、空いている置き場へ移す
+    if(free.length){
+      const k=free.splice(Math.floor(Math.random()*free.length),1)[0];
+      const dx=(k.x+tabM)-p.x, dy=(k.y+tabM)-p.y;
+      for(const q of list){ q.x+=dx; q.y+=dy; }
+      clampGroup(list);
+    }
+  }
+}
+// かたまりごと盤面へ置く
+function placeGroup(list){
+  for(const p of list){
+    const t=targetPos(p);
+    p.x=t.x; p.y=t.y; p.placed=true;
+    const i=tray.indexOf(p); if(i>=0) tray.splice(i,1);
+  }
+  glows.push({ pieces:connectedGroup(list[0]), t0:performance.now() });
+  startTimer();
+  if(updateProgress()===pieces.length) finish(); else saveProgress();
+}
+
+// ---- トレイ ----
+// ---- 机の上のピース ----
+// まだ置いていないピースの一覧。外周モードのときは外周だけ。
+// くっついているピースは、外周モードでも隠さない
+function looseList(){ return edgeOnly ? tray.filter(p=>isEdgePiece(p)||p.gsz>1) : tray; }
+
+// 画面のうち、ツールバーに隠れていない範囲
+function viewRect(){
+  const pt=portrait();
+  const vx=pt?0:RAIL_W(), vy=pt?RAIL_H():0;
+  return { x:vx, y:vy, w:Math.max(1,W-vx), h:Math.max(1,H-vy) };
+}
+// 机全体がちょうど画面に収まる倍率
+function fitScale(){
+  const v=viewRect();
+  if(!table.w||!table.h) return 1;
+  return Math.min(v.w/table.w, v.h/table.h);
+}
+function fitView(){ zoom.s=fitScale(); clampView(); invalidate(); }
+
+// 盤面のまわりに、ピースを置ける場所を格子状に作る
+function makeSlots(TW,TH,cw,ch,stepX,stepY){
+  const bx=(TW-board.w)/2, by=(TH-board.h)/2;
+  const nx=Math.floor(TW/stepX), ny=Math.floor(TH/stepY);
+  const offX=(TW-nx*stepX)/2, offY=(TH-ny*stepY)/2;
+  const out=[];
+  for(let r=0;r<ny;r++) for(let c=0;c<nx;c++){
+    const x=offX+c*stepX, y=offY+r*stepY;
+    // 盤面の上には置かない
+    if(x+cw>bx-2 && x<bx+board.w+2 && y+ch>by-2 && y<by+board.h+2) continue;
+    out.push({x,y});
+  }
+  return out;
+}
+// 全部のピースが置けるまで机を広げる
+function buildTable(){
+  const cw=board.pw+tabM*2, ch=board.ph+tabM*2;
+  const stepX=Math.max(6,cw*SCATTER_GAP), stepY=Math.max(6,ch*SCATTER_GAP);
+  const need=carve ? pieces.length : cols*rows;   // 彫りものは枚数がピースの数
+  const v=viewRect();
+  // 盤面のまわりに最小限の余白をつけた大きさから始めて、
+  // 全部のピースが置けるようになるまで、画面に対して余っている向きへ広げていく。
+  // こうすると机の形が画面の形に近くなり、引いたときに盤面が大きく見える。
+  // ぴったりの数だと格子状に並んでしまうので、少し余分に場所を用意する
+  const want=Math.ceil(need+Math.min(need*0.6,40));
+  slotStep={x:stepX,y:stepY};
+  let TW=board.w+stepX*1.1, TH=board.h+stepY*1.1;
+  for(let g=0; g<400; g++){
+    const slots=makeSlots(TW,TH,cw,ch,stepX,stepY);
+    if(slots.length>=want){ table={w:TW,h:TH}; slotList=slots; return; }
+    if(TH/TW < v.h/v.w) TH+=stepY; else TW+=stepX;
+  }
+  table={w:TW,h:TH};
+  slotList=makeSlots(TW,TH,cw,ch,stepX,stepY);
+}
+// ピースを机の上にばらまく
+function scatterPieces(list){
+  const s=slotList.slice();
+  for(let i=s.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); const t=s[i]; s[i]=s[j]; s[j]=t; }
+  list.forEach((p,i)=>{
+    const k=s[i%Math.max(1,s.length)] || {x:0,y:0};
+    // 格子に見えないよう、ひと枠のなかでばらつかせる
+    p.x=k.x+tabM+(Math.random()-0.5)*slotStep.x*0.45;
+    p.y=k.y+tabM+(Math.random()-0.5)*slotStep.y*0.45;
+    clampPiece(p);
+  });
+}
+
+// ============================================================
+//  途中経過の保存と再開
+// ============================================================
+const SAVE_KEY='jigsaw-progress';
+let curImage=null;                 // いま遊んでいる絵（{name,src,mine,id}）
+
+function saveProgress(){
+  if(!playing||cleared||!curImage||!pieces.length) return;
+  const done=pieces.filter(p=>p.placed);
+  if(!done.length) return;                       // 1枚も置いていなければ保存しない
+  const r3=a=>a.map(row=>row.map(v=>Math.round(v*1000)/1000));
+  const rel=p=>[Math.round((p.x-board.x)/board.w*1e4)/1e4,
+                Math.round((p.y-board.y)/board.w*1e4)/1e4];
+  try{
+    if(carve){
+      localStorage.setItem(SAVE_KEY, JSON.stringify({
+        v:1, at:Date.now(), carve:carve.key, total:pieces.length,
+        img:{ mine:false, key:carve.src, name:carve.name },
+        level:elLevel.value,
+        placed:done.map(p=>p.i),
+        loose:tray.map(p=>[p.i].concat(rel(p))),
+        elapsed, hints, edgeOnly
+      }));
+      return;
+    }
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      v:1, at:Date.now(),
+      img:{ mine:!!curImage.mine, key:curImage.mine?curImage.id:curImage.src, name:curImage.name },
+      cols, rows, level:elLevel.value,
+      vSign, hSign, vH:r3(vH), hH:r3(hH),
+      placed:done.map(p=>[p.row,p.col]),
+      // 机の上の位置も残す（盤面の幅に対する割合で持つ）
+      loose:tray.map(p=>[p.row,p.col,
+        Math.round((p.x-board.x)/board.w*1e4)/1e4,
+        Math.round((p.y-board.y)/board.w*1e4)/1e4]),
+      elapsed, hints, edgeOnly
+    }));
+  }catch(_){ /* 保存できなくても遊べる */ }
+}
+function readSave(){
+  try{
+    const s=JSON.parse(localStorage.getItem(SAVE_KEY)||'null');
+    if(!s||s.v!==1||!s.placed||!s.placed.length) return null;
+    if(s.carve){                                 // 彫りものの続き
+      const b=CB.BOARDS.find(x=>x.key===s.carve);
+      return b ? {state:s, image:{name:b.name, src:b.src, carve:b.key}} : null;
+    }
+    // 絵がまだ残っているか確認する
+    const ps = s.img.mine ? userPhotos.find(p=>p.id===s.img.key)
+                          : BUILTIN.find(p=>p.src===s.img.key);
+    return ps ? {state:s, image:ps} : null;
+  }catch(_){ return null; }
+}
+const clearSave=()=>{ try{ localStorage.removeItem(SAVE_KEY); }catch(_){} };
+
+function showResumeCard(){
+  const box=document.getElementById('bResume');
+  const r=readSave();
+  if(!r){ box.hidden=true; return; }
+  const total=r.state.total || (r.state.cols*r.state.rows);
+  document.getElementById('resumeThumb').src=r.image.src;
+  document.getElementById('resumeInfo').textContent=
+    r.image.name+'　'+r.state.placed.length+' / '+total+' 完成　'+fmt(r.state.elapsed);
+  box.hidden=false;
+}
+
+// ============================================================
+//  ゲーム進行
+// ============================================================
+function rebuildGraphics(){
+  // ピースの絵は「トレイでの大きさ」と「盤面の拡大率」の大きいほうに合わせて焼く
+  renderedScale=Math.max(1, zoom.s);
+  if(carve){
+    for(const p of pieces){ p.path=carvePath(p); renderCarvePiece(p); }
+    renderCarveBoardLayer();
+    return;
+  }
+  for(const p of pieces){ p.path=buildPath(p.row,p.col); renderPiece(p); }
+  renderBoardLayer();
+}
+// saved を渡すと、前回の続きから組み立て直す
+function newGame(saved){
+  if(!img) return;
+  zoom={s:1,ox:0,oy:0};   // 新しいパズルは等倍から
+
+  carve = (curImage && curImage.carve)
+        ? (CB.BOARDS.find(b=>b.key===curImage.carve) || null) : null;
+
+  if(carve){
+    // 彫りもの：ピースの形は carve.js に入っているので、そのまま使う
+    pieces = carve.pieces.map((q,i)=>{
+      const b=pathBox(q.d);
+      return { i:i, d:q.d, e:q.e, w:q.w||0,
+               bx:b.x, by:b.y, bw:b.w, bh:b.h,
+               row:-1, col:-1, x:0, y:0, placed:false,
+               path:null, canvas:null, gid:i, gsz:1 };
+    });
+    layout();
+    resetGroups();
+    rebuildGraphics();
+  }else if(saved){
+    cols=saved.cols; rows=saved.rows; elLevel.value=saved.level;
+    // 古い中断データの難易度が一覧から消えているときは、選択欄が空白になって
+    // 次の新しいパズルのピース数が決められなくなるので、既定値に戻す
+    if(elLevel.selectedIndex < 0) elLevel.value = LEVEL_DEFAULT;
+    vSign=saved.vSign; hSign=saved.hSign; vH=saved.vH; hH=saved.hH;
+  }else{
+    chooseGrid(parseInt(elLevel.value,10));
+    vSign=[];vH=[];
+    for(let r=0;r<rows;r++){ vSign.push([]);vH.push([]);
+      for(let c=0;c<=cols;c++){ vSign[r].push(Math.random()<.5?-1:1); vH[r].push(rnd(0.88,1.12)); } }
+    hSign=[];hH=[];
+    for(let r=0;r<=rows;r++){ hSign.push([]);hH.push([]);
+      for(let c=0;c<cols;c++){ hSign[r].push(Math.random()<.5?-1:1); hH[r].push(rnd(0.88,1.12)); } }
+  }
+  if(!carve){
+    layout();
+    pieces=[];
+    for(let r=0;r<rows;r++) for(let c=0;c<cols;c++)
+      pieces.push({row:r,col:c,x:0,y:0,placed:false,path:null,canvas:null,gid:0,gsz:1});
+    resetGroups();
+    rebuildGraphics();
+  }
+
+  glows=[]; returning=[]; drag=null; hintCell=null; tour=null;
+  playing=true; cleared=false; stopTimer();
+
+  if(saved && carve){
+    // 彫りもの：番号で戻す
+    const at=new Map(pieces.map(p=>[p.i,p]));
+    for(const i of (saved.placed||[])){
+      const p=at.get(i); if(!p) continue;
+      const t=targetPos(p); p.x=t.x; p.y=t.y; p.placed=true;
+    }
+    tray=[];
+    for(const [i,rx,ry] of (saved.loose||[])){
+      const p=at.get(i); if(!p||p.placed) continue;
+      p.x=board.x+rx*board.w; p.y=board.y+ry*board.w; tray.push(p);
+    }
+    if(!tray.length){ tray=pieces.filter(p=>!p.placed); scatterPieces(tray); }
+    pieces=pieces.filter(p=>p.placed).concat(pieces.filter(p=>!p.placed));
+    elapsed=saved.elapsed||0;
+    hints=(saved.hints==null?HINTS_MAX:saved.hints);
+    edgeOnly=!!saved.edgeOnly;
+  }else if(saved){
+    const at=new Map(pieces.map(p=>[p.row+','+p.col,p]));
+    for(const [r,c] of saved.placed){
+      const p=at.get(r+','+c); if(!p) continue;
+      const t=targetPos(p); p.x=t.x; p.y=t.y; p.placed=true;
+    }
+    // 机の上のピースは、保存された位置と重なり順のまま戻す
+    if(saved.loose && saved.loose.length){
+      tray=[];
+      for(const [r,c,rx,ry] of saved.loose){
+        const p=at.get(r+','+c); if(!p||p.placed) continue;
+        p.x=board.x+rx*board.w; p.y=board.y+ry*board.w; tray.push(p);
+      }
+    }else{
+      // 古い保存データには位置が入っていないので、散らし直す
+      tray=(saved.tray||[]).map(([r,c])=>at.get(r+','+c)).filter(p=>p&&!p.placed);
+      scatterPieces(tray);
+    }
+    pieces=pieces.filter(p=>p.placed).concat(pieces.filter(p=>!p.placed));
+    rebuildGroups();          // 位置関係から、くっついていたかたまりを組み直す
+    elapsed=saved.elapsed||0;
+    hints=(saved.hints==null?HINTS_MAX:saved.hints);
+    edgeOnly=!!saved.edgeOnly;
+  }else{
+    tray=pieces.slice().sort(()=>Math.random()-.5);
+    scatterPieces(tray);
+    elapsed=0; hints=HINTS_MAX; edgeOnly=false;
+  }
+  zoom.s=fitScale(); clampView();     // 机全体が見える状態から始める
+  elHintN.textContent=hints;
+  document.getElementById('bEdge').classList.toggle('on',edgeOnly);
+  peek=false; document.getElementById('bPeek').classList.remove('on');
+
+  paused=false; setPaused(false);
+  elTime.textContent=fmt(elapsed); updateProgress();
+  ovSetup.classList.remove('show'); ovClear.classList.remove('show');
+  if(!saved) clearSave(); else saveProgress();
+  loop();
+}
+
+function updateProgress(){
+  const d=pieces.filter(p=>p.placed).length;
+  elProg.textContent=d+' / '+pieces.length;
+  return d;
+}
+function startTimer(){
+  if(timerId||paused) return;
+  startTime=Date.now()-elapsed;
+  timerId=setInterval(()=>{ elapsed=Date.now()-startTime; elTime.textContent=fmt(elapsed); },250);
+}
+function stopTimer(){
+  if(!timerId) return;
+  clearInterval(timerId); timerId=null;
+  elapsed=Date.now()-startTime;            // 止めた瞬間までを正確に記録する
+  elTime.textContent=fmt(elapsed);
+}
+
+// タイマーの一時停止／再開。止めている間は絵とピースを隠す
+function setPaused(v){
+  if(!playing||cleared){ v=false; }
+  paused=v;
+  if(paused){ stopTimer(); if(drag){ endDrag(); } }
+  else { if(elapsed>0) startTimer(); }
+  document.getElementById('icPause').style.display = paused?'none':'';
+  document.getElementById('icPlay').style.display  = paused?'':'none';
+  const b=document.getElementById('bPause');
+  b.classList.toggle('on',paused);
+  b.title = paused?'タイマーを再開':'タイマーを一時停止';
+  b.setAttribute('aria-pressed',paused?'true':'false');
+  invalidate();
+}
+const togglePause=()=>setPaused(!paused);
+
+// 置かれたピースのうち、そのピースとつながっている塊を求める
+function connectedGroup(start){
+  const key=p=>p.row+','+p.col;
+  const map=new Map(); for(const p of pieces) if(p.placed) map.set(key(p),p);
+  const seen=new Set([key(start)]), out=[start], q=[start];
+  while(q.length){
+    const p=q.pop();
+    for(const [dr,dc] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const k=(p.row+dr)+','+(p.col+dc);
+      if(map.has(k)&&!seen.has(k)){ seen.add(k); const n=map.get(k); out.push(n); q.push(n); }
+    }
+  }
+  return out;
+}
+
+function finish(){
+  cleared=true; playing=false; stopTimer();
+  clearSave();                                   // 完成したら途中経過は消す
+  document.getElementById('clearTime').textContent=fmt(elapsed);
+  const ub=document.getElementById('unlockBox');
+  ub.hidden=true;
+  if(carve){
+    // 彫りもの（ボーナスステージ）を完成した
+    document.getElementById('clearTitle').textContent='スペシャルステージ達成！ 🎉';
+    document.getElementById('clearN').textContent=pieces.length;
+    document.getElementById('clearPcs').hidden=false;
+    document.getElementById('clearLevelRow').hidden=true;
+    document.getElementById('clearPick').hidden=true;
+    document.getElementById('nexts').innerHTML='';
+  }else{
+    document.getElementById('clearTitle').textContent='完成！ 🎉';
+    document.getElementById('clearPcs').hidden=true;
+    document.getElementById('clearLevelRow').hidden=false;
+    document.getElementById('clearPick').hidden=false;
+    // その難易度に決まっている彫りものがあれば解放する
+    const got=CB.BOARDS.find(b=>b.unlock===elLevel.value && carveGot.indexOf(b.key)<0);
+    if(got){
+      carveGot.push(got.key); saveClears();
+      document.getElementById('unlockT').textContent=
+        '彫りもの「'+got.name+'」が解放されました';
+      document.getElementById('unlockS').textContent=
+        got.unlockName+'をクリアしたごほうびです';
+      ub.hidden=false; carveNew=true;
+      refreshCarveTab();
+    }
+    buildNexts();
+  }
+  startTour();                                   // 拡大 → 一周 → 全体表示 → タップ待ち
+}
+
+// ============================================================
+//  完成したあとの見せる演出
+//  左上から時計回りにぐるっと一周してから、全体を映す
+// ============================================================
+const TOUR_IN=800, TOUR_LEG=900, TOUR_OUT=900;   // それぞれにかける時間(ミリ秒)
+const tourEase=t=>t<0.5 ? 2*t*t : 1-Math.pow(-2*t+2,2)/2;
+function viewCenterWorld(){
+  const v=viewRect();
+  return toWorld(v.x+v.w/2, v.y+v.h/2);
+}
+function startTour(){
+  const v=viewRect();
+  // 絵の半分ぐらいが画面に入るまで寄る（最低でも今の1.35倍は寄る）
+  const s=clamp(Math.max(v.w/(board.w*0.5), fitScale()*1.35), fitScale(), ZOOM_MAX);
+  // 寄ったときに絵が粗くならないよう、その倍率で焼き直しておく
+  const keep=zoom.s;
+  zoom.s=s;
+  if(pieces.length && s>renderedScale+0.05) rebuildGraphics();
+  zoom.s=keep;
+  // 四隅を少し内側に取り、そこを順に巡る
+  const inset=Math.min(board.w,board.h)*0.2;
+  const x0=board.x+inset, x1=board.x+board.w-inset;
+  const y0=board.y+inset, y1=board.y+board.h-inset;
+  const c=viewCenterWorld();
+  tour={ s, phase:'move', t0:performance.now(),
+         from:{s:zoom.s, x:c.x, y:c.y},
+         pts:[{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1},{x:x0,y:y0}] };
+  invalidate();
+}
+function tourSetView(s,cx,cy){
+  const v=viewRect();
+  zoom.s=s;
+  zoom.ox=v.x+v.w/2-cx*s;
+  zoom.oy=v.y+v.h/2-cy*s;
+  clampView();
+}
+function tourEnd(){
+  tour.phase='hold';
+  zoom.s=fitScale(); clampView();
+}
+function stepTour(now){
+  if(!tour||tour.phase==='hold') return;
+  let t=now-tour.t0;
+  if(t<TOUR_IN){                                   // ① 左上へ寄る
+    const k=tourEase(t/TOUR_IN), f=tour.from, a=tour.pts[0];
+    tourSetView(f.s+(tour.s-f.s)*k, f.x+(a.x-f.x)*k, f.y+(a.y-f.y)*k);
+    return;
+  }
+  t-=TOUR_IN;
+  if(t<TOUR_LEG*4){                                // ② 時計回りに一周
+    const i=Math.floor(t/TOUR_LEG), k=tourEase((t-i*TOUR_LEG)/TOUR_LEG);
+    const a=tour.pts[i], b=tour.pts[i+1];
+    tourSetView(tour.s, a.x+(b.x-a.x)*k, a.y+(b.y-a.y)*k);
+    return;
+  }
+  t-=TOUR_LEG*4;
+  if(t<TOUR_OUT){                                  // ③ 引いて全体を映す
+    const k=tourEase(t/TOUR_OUT), a=tour.pts[4], fs=fitScale();
+    tourSetView(tour.s+(fs-tour.s)*k,
+                a.x+(board.x+board.w/2-a.x)*k,
+                a.y+(board.y+board.h/2-a.y)*k);
+    return;
+  }
+  tourEnd();                                       // ④ タップ待ちへ
+}
+// 演出中のタップ：途中なら最後まで飛ばし、待っている間なら結果を出す
+function tourTap(){
+  if(tour.phase!=='hold'){ tourEnd(); invalidate(); return; }
+  tour=null;
+  ovClear.classList.add('show');
+  invalidate();
+}
+
+// ============================================================
+//  描画
+// ============================================================
+function loop(){
+  cancelAnimationFrame(rafId);
+  const now=performance.now();
+  stepReturning(now);
+  stepTour(now);
+  render();
+  glows=glows.filter(g=>now-g.t0<GLOW_MS);
+  if(glows.length||returning.length||(tour&&tour.phase!=='hold')||(hintCell&&now<hintUntil))
+    rafId=requestAnimationFrame(loop);
+}
+const invalidate=()=>loop();
+
+function render(){
+  const now=performance.now();
+  ctx.clearRect(0,0,W,H);
+  if(woodLayer) ctx.drawImage(woodLayer,0,0,W,H); else { ctx.fillStyle='#a97740'; ctx.fillRect(0,0,W,H); }
+  if(!img||!pieces.length) return;
+
+  // ===== ここから机の上。拡大と移動をまとめてかける =====
+  ctx.save();
+  ctx.translate(zoom.ox,zoom.oy); ctx.scale(zoom.s,zoom.s);
+
+  // ---- パズル面（机に敷いたマット）----
+  ctx.save();
+  ctx.shadowColor='rgba(0,0,0,.35)'; ctx.shadowBlur=18; ctx.shadowOffsetY=6;
+  ctx.fillStyle='rgba(196,166,124,.55)';
+  if(carve) ctx.fill(carve.bpath); else ctx.fillRect(board.x,board.y,board.w,board.h);
+  ctx.restore();
+  ctx.strokeStyle='rgba(70,46,20,.35)'; ctx.lineWidth=1.5;
+  if(carve) ctx.stroke(carve.bpath);
+  else ctx.strokeRect(board.x+.5,board.y+.5,board.w-1,board.h-1);
+  if(boardLayer) ctx.drawImage(boardLayer,board.x,board.y,boardLayer.width/dpr,boardLayer.height/dpr);
+  if(peek){
+    ctx.save(); ctx.globalAlpha=.34;
+    if(carve){
+      ctx.clip(carve.bpath);
+      ctx.translate(carve.tx,carve.ty); ctx.scale(carve.k,carve.k);
+      ctx.drawImage(img,carve.ix,carve.iy,carve.iw,carve.ih);
+    }else ctx.drawImage(img,board.x,board.y,board.w,board.h);
+    ctx.restore();
+  }
+
+  // ---- ヒント：はまる場所を点滅 ----
+  if(hintCell && now<hintUntil){
+    const a=0.35+0.35*Math.sin(now/160);
+    const t=targetPos(hintCell);
+    ctx.save(); ctx.translate(t.x-tabM,t.y-tabM);
+    ctx.fillStyle='rgba(42,157,143,'+(a*0.5)+')'; ctx.fill(hintCell.path);
+    ctx.lineWidth=3; ctx.strokeStyle='rgba(42,157,143,'+a+')'; ctx.stroke(hintCell.path);
+    ctx.restore();
+  }
+
+  // ---- 盤上のピース ----
+  for(const p of pieces) if(p.placed) ctx.drawImage(p.canvas,p.x-tabM,p.y-tabM,p.cw,p.ch);
+
+  // ---- 塊の発光（控えめに）----
+  for(const g of glows){
+    const k=(now-g.t0)/GLOW_MS, a=Math.sin(Math.min(1,k)*Math.PI);
+    ctx.save();
+    for(const p of g.pieces){
+      ctx.save(); ctx.translate(p.x-tabM,p.y-tabM);
+      ctx.fillStyle='rgba(255,232,160,'+(0.13*a)+')'; ctx.fill(p.path);
+      ctx.lineWidth=1.8; ctx.strokeStyle='rgba(255,243,200,'+(0.42*a)+')'; ctx.stroke(p.path);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // ---- 机に散らばっているピース（後ろの要素ほど手前に描く）----
+  {
+    const a0=toWorld(0,0), a1=toWorld(W,H);
+    for(const p of looseList()){
+      if(drag&&drag.piece===p) continue;
+      const ox=p.x-tabM, oy=p.y-tabM;
+      if(ox>a1.x||ox+p.cw<a0.x||oy>a1.y||oy+p.ch<a0.y) continue;   // 画面の外は描かない
+      ctx.drawImage(p.canvas,ox,oy,p.cw,p.ch);
+    }
+  }
+
+  // ---- ヒント：机の上のそのピースも光らせる ----
+  if(hintCell && now<hintUntil && !hintCell.placed){
+    const a=0.35+0.35*Math.sin(now/160);
+    ctx.save(); ctx.translate(hintCell.x-tabM,hintCell.y-tabM);
+    ctx.lineWidth=3.5; ctx.strokeStyle='rgba(42,157,143,'+a+')'; ctx.stroke(hintCell.path);
+    ctx.restore();
+  }
+
+  // ---- 持ち上げているピース ----
+  if(drag){
+    const p=drag.piece;
+    ctx.save();
+    ctx.shadowColor='rgba(0,0,0,.5)'; ctx.shadowBlur=22; ctx.shadowOffsetY=12;
+    ctx.drawImage(p.canvas,p.x-tabM,p.y-tabM,p.cw,p.ch);
+    ctx.restore();
+  }
+
+  ctx.restore();
+  // ===== ここから先は拡大の影響を受けない（画面そのままの座標）=====
+
+  // ---- 拡大しているときだけ倍率を出す（完成の演出中は出さない）----
+  if(!tour && zoom.s>fitScale()*1.03){
+    ctx.save();
+    ctx.fillStyle='rgba(30,20,10,.45)';
+    roundRect(ctx,10,H-30,58,22,11); ctx.fill();
+    ctx.fillStyle='#f6f1e7'; ctx.textAlign='center';
+    ctx.font='600 12px -apple-system,sans-serif';
+    ctx.fillText(zoom.s.toFixed(1)+'倍',39,H-15);
+    ctx.textAlign='start'; ctx.restore();
+  }
+
+  // ---- 完成の演出が終わったら、タップの案内を出す ----
+  if(tour && tour.phase==='hold'){
+    ctx.save();
+    const label='タップして結果を見る';
+    ctx.font='600 14px -apple-system,"Hiragino Sans","Noto Sans JP",sans-serif';
+    const bw=ctx.measureText(label).width+30, v=viewRect();
+    const bx=v.x+(v.w-bw)/2, by=H-58;
+    ctx.fillStyle='rgba(30,20,10,.62)';
+    roundRect(ctx,bx,by,bw,34,17); ctx.fill();
+    ctx.fillStyle='#f6f1e7'; ctx.textAlign='center';
+    ctx.fillText(label, bx+bw/2, by+22);
+    ctx.textAlign='start'; ctx.restore();
+  }
+
+  // ---- 一時停止中は絵とピースを隠す ----
+  if(paused) drawPauseCover();
+}
+
+function roundRect(c,x,y,w,h,r){
+  r=Math.min(r,w/2,h/2);
+  c.beginPath();
+  c.moveTo(x+r,y);
+  c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r);     c.arcTo(x,y,x+w,y,r);
+  c.closePath();
+}
+function drawPauseCover(){
+  ctx.save();
+  ctx.fillStyle='rgba(46,32,16,.93)';
+  ctx.fillRect(0,0,W,H);
+  const cw=Math.min(300,W*0.8), ch=132, cx=(W-cw)/2, cy=(H-ch)/2;
+  ctx.fillStyle='rgba(255,255,255,.10)';
+  roundRect(ctx,cx,cy,cw,ch,16); ctx.fill();
+  ctx.fillStyle='#f6f1e7';
+  ctx.textAlign='center';
+  ctx.font='600 17px -apple-system,"Hiragino Sans","Noto Sans JP",sans-serif';
+  ctx.fillText('一時停止中',W/2,cy+44);
+  ctx.font='500 26px -apple-system,sans-serif';
+  ctx.fillText(fmt(elapsed),W/2,cy+80);
+  ctx.font='13px -apple-system,"Hiragino Sans","Noto Sans JP",sans-serif';
+  ctx.fillStyle='rgba(246,241,231,.72)';
+  ctx.fillText('画面をタップすると再開します',W/2,cy+110);
+  ctx.textAlign='start';
+  ctx.restore();
+}
+
+
+// ============================================================
+//  入力
+// ============================================================
+const snapDist=()=>Math.min(board.pw,board.ph)*SNAP_RATIO;
+function pos(e){ const r=cv.getBoundingClientRect(); return {x:e.clientX-r.left, y:e.clientY-r.top}; }
+
+function hitPath(p,x,y,ox,oy,s){
+  hitCtx.setTransform(1,0,0,1,0,0);
+  hitCtx.setTransform(s,0,0,s,ox,oy);
+  const inside=hitCtx.isPointInPath(p.path,x,y);
+  hitCtx.setTransform(1,0,0,1,0,0);
+  return inside;
+}
+// 机の上のピースを拾う（手前にあるものを優先）
+function pickLoose(sx,sy){
+  const list=looseList();
+  const w=toWorld(sx,sy);
+  // 1) 輪郭ちょうどで判定
+  for(let i=list.length-1;i>=0;i--){
+    const p=list[i], ox=p.x-tabM, oy=p.y-tabM;
+    if(w.x<ox||w.x>ox+p.cw||w.y<oy||w.y>oy+p.ch) continue;
+    const s=toScreen(ox,oy);
+    if(hitPath(p,sx,sy,s.x,s.y,zoom.s)) return p;
+  }
+  // 2) 指では狙いにくいので、四角の中ならつかめるようにする
+  for(let i=list.length-1;i>=0;i--){
+    const p=list[i], ox=p.x-tabM, oy=p.y-tabM;
+    if(w.x>=ox&&w.x<=ox+p.cw&&w.y>=oy&&w.y<=oy+p.ch) return p;
+  }
+  return null;
+}
+
+// ---- 画面の座標 ⇔ 机の座標 ----
+const toWorld  = (x,y) => ({ x:(x-zoom.ox)/zoom.s, y:(y-zoom.oy)/zoom.s });
+const toScreen = (x,y) => ({ x:x*zoom.s+zoom.ox,   y:y*zoom.s+zoom.oy   });
+function clampView(){
+  const v=viewRect();
+  zoom.s=clamp(zoom.s, fitScale(), ZOOM_MAX);
+  const tw=table.w*zoom.s, th=table.h*zoom.s;
+  zoom.ox = tw<=v.w ? v.x+(v.w-tw)/2 : clamp(zoom.ox, v.x+v.w-tw, v.x);
+  zoom.oy = th<=v.h ? v.y+(v.h-th)/2 : clamp(zoom.oy, v.y+v.h-th, v.y);
+}
+// ピースが机からはみ出さないように収める
+function clampPiece(p){
+  p.x=clamp(p.x, tabM, Math.max(tabM, table.w-p.cw+tabM));
+  p.y=clamp(p.y, tabM, Math.max(tabM, table.h-p.ch+tabM));
+}
+// 拾ったピースをいちばん手前へ移す
+function toFront(p){ const i=tray.indexOf(p); if(i>=0){ tray.splice(i,1); tray.push(p); } }
+// かたまりのどれかが盤面の上にあるか
+const groupOnBoard=list=>list.some(onBoard);
+// ピースの中心が盤面の上にあるか
+function onBoard(p){
+  const cx=p.x+(carve ? p.bw*carve.k : board.pw)/2,
+        cy=p.y+(carve ? p.bh*carve.k : board.ph)/2;
+  return cx>board.x && cx<board.x+board.w && cy>board.y && cy<board.y+board.h;
+}
+// 戻っている途中のピースを少しずつ動かす
+function stepReturning(now){
+  if(!returning.length) return;
+  returning=returning.filter(f=>{
+    const k=Math.min(1,(now-f.t0)/f.dur), e=1-Math.pow(1-k,3);
+    f.piece.x=f.x0+(f.x1-f.x0)*e;
+    f.piece.y=f.y0+(f.y1-f.y0)*e;
+    return k<1;
+  });
+}
+
+// ---- 2本指で机を広げる・動かす ----
+function pinchStart(){
+  drag=null; panView=null;
+  const v=[...pointers.values()];
+  pinch={ d:Math.max(1,Math.hypot(v[0].x-v[1].x, v[0].y-v[1].y)),
+          mx:(v[0].x+v[1].x)/2, my:(v[0].y+v[1].y)/2,
+          s:zoom.s, ox:zoom.ox, oy:zoom.oy };
+}
+function pinchMove(){
+  const v=[...pointers.values()];
+  if(v.length<2) return;
+  const d=Math.hypot(v[0].x-v[1].x, v[0].y-v[1].y);
+  const mx=(v[0].x+v[1].x)/2, my=(v[0].y+v[1].y)/2;
+  const ns=clamp(pinch.s*(d/pinch.d), fitScale(), ZOOM_MAX);
+  const k=ns/pinch.s;
+  // つまんだ中心が動かないようにしつつ、指の移動ぶんだけ机をずらす
+  zoom.s=ns;
+  zoom.ox=mx-(pinch.mx-pinch.ox)*k;
+  zoom.oy=my-(pinch.my-pinch.oy)*k;
+  clampView(); invalidate();
+}
+function pinchEnd(){
+  pinch=null;
+  // 広げたぶんピースの絵が粗くならないよう、必要なら焼き直す
+  if(pieces.length && zoom.s>renderedScale+0.05) rebuildGraphics();
+  invalidate();
+}
+
+cv.addEventListener('pointerdown',e=>{
+  if(paused){ setPaused(false); return; }      // 一時停止中はタップで再開
+  if(cleared){                                 // 完成の演出中／タップ待ち
+    if(tour) tourTap(); else ovClear.classList.add('show');
+    return;
+  }
+  if(!playing) return;
+  const {x,y}=pos(e);
+  pointers.set(e.pointerId,{x,y});
+  if(pointers.size===2){ pinchStart(); return; }   // 2本目の指＝拡大の操作
+  if(pointers.size>2) return;
+
+  const p=pickLoose(x,y);
+  if(p){
+    const list=groupOf(p);                        // くっついていれば、かたまりごと持ち上げる
+    returning=returning.filter(f=>list.indexOf(f.piece)<0);  // 戻る途中なら中断
+    const home={x:p.x, y:p.y};                    // 置けなかったときに戻る場所
+    // 指でピースが隠れないよう、タッチのときは少し上に持ち上げる
+    const lift = e.pointerType==='touch' ? Math.min(board.ph*0.8, 60)/zoom.s : 0;
+    for(const q of list){ q.y-=lift; toFront(q); }
+    const w=toWorld(x,y);
+    drag={piece:p, list, dx:w.x-p.x, dy:w.y-p.y, homeX:home.x, homeY:home.y};
+    try{cv.setPointerCapture(e.pointerId);}catch(_){}
+    startTimer(); invalidate(); return;
+  }
+
+  // 何もない所 → 机を動かす。すばやく2回たたいたら机全体を映す
+  const t=performance.now();
+  if(t-lastTapT<300 && Math.hypot(x-lastTapX,y-lastTapY)<30){ lastTapT=0; fitView(); return; }
+  lastTapT=t; lastTapX=x; lastTapY=y;
+  panView={x, y, ox:zoom.ox, oy:zoom.oy};
+  try{cv.setPointerCapture(e.pointerId);}catch(_){}
+});
+
+cv.addEventListener('pointermove',e=>{
+  const {x,y}=pos(e);
+  if(pointers.has(e.pointerId)) pointers.set(e.pointerId,{x,y});
+  if(pinch){ pinchMove(); return; }
+  if(drag){
+    const w=toWorld(x,y), p=drag.piece;
+    const ddx=(w.x-drag.dx)-p.x, ddy=(w.y-drag.dy)-p.y;
+    for(const q of drag.list){ q.x+=ddx; q.y+=ddy; }
+    clampGroup(drag.list); invalidate(); return;
+  }
+  if(panView){
+    zoom.ox=panView.ox+(x-panView.x);
+    zoom.oy=panView.oy+(y-panView.y);
+    clampView(); invalidate(); return;
+  }
+});
+
+function endDrag(){
+  panView=null;
+  if(!drag) return;
+  const p=drag.piece, list=drag.list, t=targetPos(p);
+  const hx=drag.homeX-p.x, hy=drag.homeY-p.y;
+  drag=null;
+  if(Math.hypot(p.x-t.x,p.y-t.y)<snapDist()){
+    placeGroup(list);                    // 正しい場所 → かたまりごと盤面へ
+  }else if(groupOnBoard(list)){
+    // 合っていない場所には置けない。拾った所へ戻す
+    const now=performance.now();
+    for(const q of list)
+      returning.push({piece:q, x0:q.x, y0:q.y, x1:q.x+hx, y1:q.y+hy, t0:now, dur:260});
+  }else{
+    const merged=joinGroups(list);       // 机の上なら、隣どうしはくっつく
+    if(merged){
+      glows.push({ pieces:merged.slice(), t0:performance.now() });
+      startTimer();
+    }else{
+      clampGroup(list);
+    }
+    saveProgress();
+  }
+  invalidate();
+}
+function onPointerUp(e){
+  pointers.delete(e.pointerId);
+  if(pinch){ if(pointers.size<2) pinchEnd(); return; }
+  endDrag();
+}
+cv.addEventListener('pointerup',onPointerUp);
+cv.addEventListener('pointercancel',onPointerUp);
+
+// マウスのホイールでも拡大できるようにする
+cv.addEventListener('wheel',e=>{
+  if(!playing||cleared) return;
+  e.preventDefault();
+  const {x,y}=pos(e);
+  const ns=clamp(zoom.s*Math.pow(1.0016,-e.deltaY), fitScale(), ZOOM_MAX);
+  if(Math.abs(ns-zoom.s)<1e-4) return;
+  const w=toWorld(x,y);
+  zoom.s=ns; zoom.ox=x-w.x*ns; zoom.oy=y-w.y*ns;
+  clampView();
+  if(pieces.length && zoom.s>renderedScale+0.05) rebuildGraphics();
+  invalidate();
+},{passive:false});
+
+// ============================================================
+//  ツールバー
+// ============================================================
+// 絵をえらぶ画面を開く／閉じる（遊んでいる途中なら閉じるボタンを出す）
+let pausedByMenu=false;                     // 一覧を開いている間だけ止めたかどうか
+function openSetup(){
+  ovClear.classList.remove('show');
+  // 一覧を開いている間はタイマーを止める（遊んでいる途中のときだけ）
+  pausedByMenu = !!(playing && !cleared && timerId);
+  if(pausedByMenu) stopTimer();
+  saveProgress();
+  document.getElementById('bCloseSetup').hidden = !pieces.length;
+  renderGallery();
+  showResumeCard();
+  ovSetup.classList.add('show');
+}
+function closeSetup(){
+  ovSetup.classList.remove('show');
+  // 一覧のために止めていた場合だけ、続きから再開する
+  if(pausedByMenu && playing && !cleared && !paused) startTimer();
+  pausedByMenu=false;
+}
+document.getElementById('bCloseSetup').addEventListener('click',closeSetup);
+document.getElementById('bNew').addEventListener('click',openSetup);
+document.getElementById('bEdge').addEventListener('click',e=>{
+  edgeOnly=!edgeOnly; e.currentTarget.classList.toggle('on',edgeOnly);
+  toast(edgeOnly?'外周のピースだけ表示中':'すべてのピースを表示');
+  invalidate();
+});
+document.getElementById('bPeek').addEventListener('click',e=>{
+  peek=!peek; e.currentTarget.classList.toggle('on',peek); invalidate();
+});
+document.getElementById('bHint').addEventListener('click',()=>{
+  if(!playing||cleared) return;
+  if(hints<=0){ toast('ヒントを使い切りました'); return; }
+  const rest=tray.slice();
+  if(!rest.length) return;
+  hints--; elHintN.textContent=hints;
+  const p=rest[Math.floor(Math.random()*rest.length)];
+  if(edgeOnly&&!isEdgePiece(p)){ edgeOnly=false; document.getElementById('bEdge').classList.remove('on'); }
+  fitView();   // 机全体を映して、ピースと入る場所の両方を見せる
+  hintCell=p; hintUntil=performance.now()+2600;
+  toast('光っている場所にトレイのピースが入ります');
+  invalidate();
+});
+document.getElementById('bPause').addEventListener('click',togglePause);
+document.getElementById('bPic').addEventListener('click',openSetup);
+
+// 前回の続きから再開する
+document.getElementById('bResume').addEventListener('click',async e=>{
+  if(e.target.id==='bDiscard') return;
+  const r=readSave();
+  if(!r){ toast('続きのデータが見つかりませんでした'); showResumeCard(); return; }
+  if(!await selectImage(r.image,null)) return;
+  try{
+    newGame(r.state);
+  }catch(err){
+    // 続きを組み立て直せなかったときに、何も起きないままにしない。
+    // 理由を出したうえで、その絵で新しく始める。
+    console.error('resume failed', err);
+    toast('続きを読み込めませんでした：'+((err&&err.message)||err));
+    clearSave(); showResumeCard();
+    try{ newGame(); }catch(_){ }
+  }
+});
+document.getElementById('bDiscard').addEventListener('click',e=>{
+  e.stopPropagation(); clearSave(); showResumeCard(); toast('続きを消しました');
+});
+
+// 画面を離れたら自動で一時停止し、途中経過を保存する
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden){
+    if(playing && !cleared && timerId) setPaused(true);
+    saveProgress();
+  }
+});
+window.addEventListener('pagehide',saveProgress);
+window.addEventListener('beforeunload',saveProgress);
+
+// ============================================================
+//  端末の写真を取り込む
+// ============================================================
+// 取り込んだ写真は端末内（IndexedDB）に保存され、次に開いたときも残る
+const DB_NAME='jigsaw-photos', STORE='photos';
+function openDB(){
+  return new Promise((res,rej)=>{
+    if(!window.indexedDB) return rej(new Error('保存領域が使えません'));
+    const r=indexedDB.open(DB_NAME,1);
+    r.onupgradeneeded=()=>{ if(!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE,{keyPath:'id'}); };
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+function dbDo(mode,fn){
+  return openDB().then(db=>new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,mode), req=fn(tx.objectStore(STORE));
+    req.onsuccess=()=>res(req.result); req.onerror=()=>rej(req.error);
+  }));
+}
+const dbAll =()=>dbDo('readonly', s=>s.getAll());
+const dbPut =r =>dbDo('readwrite',s=>s.put(r));
+const dbDel =id=>dbDo('readwrite',s=>s.delete(id));
+
+// 大きな写真はそのままだと重いので、長辺1400pxに縮めてから使う
+async function decodeFile(file){
+  if(window.createImageBitmap){
+    try{ return await createImageBitmap(file,{imageOrientation:'from-image'}); }catch(_){}
+  }
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), im=new Image();
+    im.onload=()=>{ res(im); };
+    im.onerror=()=>{ URL.revokeObjectURL(url); rej(new Error('画像を読み込めません')); };
+    im.src=url;
+  });
+}
+async function shrink(file){
+  const src=await decodeFile(file);
+  const iw=src.width, ih=src.height;
+  const r=Math.min(1, MAX_PX/Math.max(iw,ih));
+  const w=Math.max(1,Math.round(iw*r)), h=Math.max(1,Math.round(ih*r));
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  c.getContext('2d').drawImage(src,0,0,w,h);
+  if(src.close) src.close();
+  return new Promise((res,rej)=>{
+    c.toBlob(b=>b?res(b):rej(new Error('変換できませんでした')),'image/jpeg',0.84);
+  });
+}
+const toItem=rec=>({ id:rec.id, name:rec.name, src:URL.createObjectURL(rec.blob), mine:true });
+
+async function loadUserPhotos(){
+  try{
+    const rows=await dbAll();
+    rows.sort((a,b)=>b.at-a.at);
+    userPhotos=rows.map(toItem);
+  }catch(_){ userPhotos=[]; }
+}
+async function addUserFiles(files){
+  const arr=[...files].filter(f=>f.type.indexOf('image/')===0);
+  if(!arr.length){ toast('画像ファイルを選んでください'); return; }
+  toast(arr.length+'枚を読み込んでいます…');
+  let first=null, ng=0;
+  for(const f of arr){
+    try{
+      const blob=await shrink(f);
+      const rec={ id:'u'+Date.now()+Math.random().toString(36).slice(2,7),
+                  name:(f.name||'写真').replace(/\.[^.]+$/,'').slice(0,24), blob, at:Date.now() };
+      try{ await dbPut(rec); }catch(_){ /* 保存できなくても今回は使える */ }
+      const it=toItem(rec); userPhotos.unshift(it); if(!first) first=it;
+    }catch(_){ ng++; }
+  }
+  setView('mine');                                  // 追加した写真の一覧に切り替える
+  if(first){ await selectImage(first, elGallery.querySelector('.gitem')); }
+  toast(ng? (arr.length-ng)+'枚を追加しました（'+ng+'枚は読み込めません）'
+          : arr.length+'枚を追加しました');
+}
+async function removeUserPhoto(it){
+  try{ await dbDel(it.id); }catch(_){}
+  URL.revokeObjectURL(it.src);
+  userPhotos=userPhotos.filter(p=>p.id!==it.id);
+  if(imgSrc===it.src){ const n=list()[0]; if(n) await selectImage(n,null); }
+  if(!userPhotos.length) setView('all'); else renderGallery();
+  toast('削除しました');
+}
+
+// ============================================================
+//  セットアップ画面
+// ============================================================
+async function selectImage(ps,el){
+  document.querySelectorAll('.gitem').forEach(t=>t.classList.remove('sel'));
+  if(el) el.classList.add('sel');
+  try{ img=await loadImage(ps.src); imgSrc=ps.src; curImage=ps; return true; }
+  catch(err){ toast('画像を読み込めませんでした：'+ps.name); return false; }
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+// 彫りものタブの出し入れ（解放されるまで出さない）
+function refreshCarveTab(){
+  const b=document.getElementById('tabCarve');
+  b.hidden = carveOpen()===0;
+  document.getElementById('cntCarve').textContent=carveOpen();
+  document.getElementById('tabNew').hidden=!carveNew;
+}
+
+let view='all';       // 'all' = 用意した絵 / 'carve' = 彫りもの / 'mine' = 自分の写真
+function setView(v){
+  if(v==='carve' && carveOpen()===0) v='all';
+  view=v;
+  document.getElementById('tabAll').classList.toggle('on',v==='all');
+  document.getElementById('tabCarve').classList.toggle('on',v==='carve');
+  document.getElementById('tabMine').classList.toggle('on',v==='mine');
+  // 彫りものは絵ごとに枚数が決まっているので、難易度は出さない
+  elLevel.style.display = (v==='carve') ? 'none' : '';
+  renderGallery();
+  elGallery.scrollTop=0;
+}
+function renderGallery(){
+  elGallery.innerHTML='';
+  document.getElementById('cntAll').textContent=BUILTIN.length;
+  document.getElementById('cntMine').textContent=userPhotos.length;
+  document.getElementById('cntCarve').textContent=carveOpen();
+  document.querySelector('#ovSetup .sub').textContent=
+    view==='mine'  ? 'スマホから追加した写真です。タップするとパズルがはじまります。'
+  : view==='carve' ? '決まった難易度をクリアするたびに増えます。タップするとはじまります。'
+                   : '絵をタップするとパズルがはじまります。';
+
+  const items = view==='mine' ? userPhotos
+              : view==='carve' ? carveList() : BUILTIN;
+  if(!items.length){
+    const p=document.createElement('p');
+    p.className='empty';
+    p.innerHTML = view==='mine'
+      ? 'まだ写真がありません。<br>下の「写真を追加」から、スマホの写真を選んでください。<br>選んだ写真はこの端末に保存され、次に開いたときも残ります。'
+      : view==='carve'
+      ? '上級・達人・超人をクリアすると、木製パズルが増えます。'
+      : '表示できる画像がありません。<br>images.js の FOLDER と FILES を確認してください。';
+    elGallery.appendChild(p);
+  }
+  items.forEach(ps=>{
+    const b=document.createElement('figure');
+    b.className='gitem'+(ps.src===imgSrc?' sel':'');
+    b.setAttribute('role','button'); b.tabIndex=0; b.title=ps.name;
+    b.innerHTML='<img src="'+ps.src+'" alt="'+esc(ps.name)+'">'
+      +(ps.mine?'<span class="mine">自分の写真</span>':'')
+      +'<figcaption>'+esc(ps.name)
+      +(ps.carve?' <span style="opacity:.85">／ '+ps.n+'ピース</span>':'')
+      +'</figcaption>';
+    b.querySelector('img').addEventListener('error',()=>{
+      b.querySelector('figcaption').textContent='読み込めません';
+      b.style.opacity='.45';
+    });
+    // 絵をタップしたら、その絵でパズルをはじめる
+    const pick=async()=>{ if(await selectImage(ps,b)) newGame(); };
+    b.addEventListener('click',pick);
+    b.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } });
+    if(ps.mine){
+      const del=document.createElement('button');
+      del.type='button'; del.className='del'; del.textContent='×';
+      del.title='この写真を削除'; del.setAttribute('aria-label',ps.name+' を削除');
+      del.addEventListener('click',ev=>{ ev.stopPropagation(); removeUserPhoto(ps); });
+      b.appendChild(del);
+    }
+    elGallery.appendChild(b);
+  });
+
+  // マイ写真のときだけ、末尾に追加タイルを置く
+  if(view==='mine' && items.length){
+    const add=document.createElement('button');
+    add.type='button'; add.className='addcard'; add.id='addTile';
+    add.innerHTML='<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="15" rx="2.5"/>'
+      +'<circle cx="8.5" cy="10" r="1.6"/><path d="M4 17l5-5 3.5 3.5"/><path d="M16 8v7M12.5 11.5h7"/></svg>'
+      +'<span>写真を追加</span>';
+    add.addEventListener('click',pickFiles);
+    elGallery.appendChild(add);
+  }
+}
+const pickFiles=()=>document.getElementById('file').click();
+document.getElementById('tabAll').addEventListener('click',()=>setView('all'));
+document.getElementById('tabCarve').addEventListener('click',()=>{
+  carveNew=false; document.getElementById('tabNew').hidden=true; setView('carve');
+});
+document.getElementById('tabMine').addEventListener('click',()=>setView('mine'));
+document.getElementById('tabAdd').addEventListener('click',pickFiles);
+document.getElementById('file').addEventListener('change',async e=>{
+  const fs=e.target.files;
+  if(fs&&fs.length) await addUserFiles(fs);
+  e.target.value='';                      // 同じ写真をもう一度選べるようにする
+});
+
+// ---- 完成画面：次のパズルを選ぶ ----
+const elLevelClear=document.getElementById('levelClear'), elNexts=document.getElementById('nexts');
+elLevelClear.innerHTML=elLevel.innerHTML;
+elLevelClear.addEventListener('change',()=>{ elLevel.value=elLevelClear.value; });
+function buildNexts(){
+  elLevelClear.value=elLevel.value;
+  elNexts.innerHTML='';
+  const pool=list().filter(p=>p.src!==imgSrc);
+  const picks=pool.slice().sort(()=>Math.random()-.5).slice(0,3);
+  picks.forEach(ps=>{
+    const b=document.createElement('figure');
+    b.className='gitem'; b.setAttribute('role','button'); b.tabIndex=0; b.title=ps.name;
+    b.innerHTML='<img src="'+ps.src+'" alt="'+esc(ps.name)+'"><figcaption>'+esc(ps.name)+'</figcaption>';
+    const go=async()=>{ if(await selectImage(ps,null)) newGame(); };
+    b.addEventListener('click',go);
+    b.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); go(); } });
+    elNexts.appendChild(b);
+  });
+}
+document.getElementById('bSame').addEventListener('click',newGame);
+document.getElementById('bMore').addEventListener('click',openSetup);
+
+// ============================================================
+//  リサイズ
+// ============================================================
+let rz=null;
+function relayout(){
+  clearTimeout(rz);
+  rz=setTimeout(()=>{
+    resizeCanvas();
+    if(!img){ render(); return; }
+    // 縦横が変わると机の形そのものが変わるので、盤面ではなく
+    // 「机の中のどのあたりか」を割合で覚えておき、新しい机に移し替える。
+    // こうしないと、机の外に出たピースが画面から見えなくなる。
+    const ot={w:table.w, h:table.h};
+    const frac=new Map();
+    if(ot.w>0&&ot.h>0)
+      for(const p of pieces) if(!p.placed) frac.set(p,{fx:p.x/ot.w, fy:p.y/ot.h});
+    layout();
+    if(pieces.length){
+      rebuildGraphics();
+      for(const p of pieces){
+        if(p.placed){ const t=targetPos(p); p.x=t.x; p.y=t.y; }
+        else { const f=frac.get(p); if(f){ p.x=f.fx*table.w; p.y=f.fy*table.h; } }
+      }
+      normalizeGroups();     // 大きさが変わっても、かたまりの形は崩さない
+      relocateGroups();      // 机からはみ出したもの・盤面に乗ったものを収め直す
+    }
+    // 完成の演出の途中で画面を回されたら、演出は打ち切って全体表示にする
+    if(tour && tour.phase!=='hold') tour.phase='hold';
+    zoom.s=fitScale(); clampView();   // 向きが変わったら机全体が見える状態に戻す
+    invalidate();
+  },140);
+}
+// 端末を傾けたら、その向きに合わせて組み直す
+window.addEventListener('resize',relayout);
+window.addEventListener('orientationchange',relayout);
+if(window.visualViewport) window.visualViewport.addEventListener('resize',relayout);
+
+// ============================================================
+//  起動
+// ============================================================
+(async function boot(){
+  resizeCanvas();
+  document.getElementById('ver').textContent=APP_VERSION;
+  loadClears();
+  // 確認用：URL の末尾に ?carve=2 のように付けて開くと、
+  // 「上から2つ解放された状態」にできる（動作を試すため。普通に開けば関係ない）
+  try{
+    const q=new URLSearchParams(location.search).get('carve');
+    if(q!==null){
+      const n=Math.max(0, parseInt(q,10)||0);
+      carveGot=CB.BOARDS.slice(0,n).map(b=>b.key); saveClears();
+    }
+  }catch(_){}
+  refreshCarveTab();                        // 彫りものが解放されているか調べる
+  await loadUserPhotos();          // 前回取り込んだ写真を復元する
+  renderGallery();
+  // 最初の1枚が読めなければ、読める絵が見つかるまで順に試す
+  for(const ps of [list().find(p=>p.src===imgSrc), ...list()].filter(Boolean)){
+    try{ img=await loadImage(ps.src); imgSrc=ps.src; curImage=ps; break; }catch(e){ /* 次の絵へ */ }
+  }
+  if(img){ chooseGrid(4); layout(); renderGallery(); }
+  showResumeCard();               // 前回の続きがあれば案内を出す
+  render();
+
+  // オフラインで遊べるようにする（https で配信したときだけ有効）
+  if('serviceWorker' in navigator && location.protocol.indexOf('http')===0){
+    // 「?reset=1」を付けて開くと、保存済みデータを消して作り直す（万一の復旧用）
+    if(location.search.indexOf('reset=1')>=0){
+      try{
+        const rs=await navigator.serviceWorker.getRegistrations();
+        await Promise.all(rs.map(r=>r.unregister()));
+        const ks=await caches.keys();
+        await Promise.all(ks.map(k=>caches.delete(k)));
+      }catch(_){}
+      location.replace(location.pathname);
+      return;
+    }
+    navigator.serviceWorker.register('sw.js').catch(err=>console.warn('SW登録なし:',err));
+    // 新しい内容に入れ替わったら、その場で読み込み直す
+    let reloading=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(reloading) return; reloading=true; location.reload();
+    });
+  }
+})();
+
+})();
+</script>
+</body>
+</html>
