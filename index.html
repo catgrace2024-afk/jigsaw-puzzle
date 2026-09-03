@@ -164,8 +164,13 @@
     display:flex;align-items:center;gap:9px;text-align:left;
     margin:0 0 14px;padding:11px 13px;border-radius:13px;
     background:rgba(42,157,143,.12);border:1px solid var(--accent);
+    animation:unlockGlow 1.3s ease-in-out infinite;
   }
   .unlock[hidden]{display:none;}
+  @keyframes unlockGlow{
+    0%,100%{box-shadow:0 0 6px 1px rgba(42,157,143,.30);border-color:var(--accent);}
+    50%{box-shadow:0 0 22px 7px rgba(42,157,143,.80);border-color:#4fd9c4;}
+  }
   .unlock svg{width:24px;height:24px;flex:0 0 auto;fill:none;stroke:var(--accent);
     stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;}
   .unlock b{display:block;font-size:13px;color:var(--accent);}

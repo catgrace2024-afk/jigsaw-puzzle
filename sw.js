@@ -2,7 +2,7 @@
    Service Worker — オフラインで遊べるようにするための仕組み
    ファイルを更新したら VERSION の数字を1つ上げてください。
    ============================================================ */
-const VERSION = 'jigsaw-v27';
+const VERSION = 'jigsaw-v28';
 const ASSETS = [
   "./",
   "index.html",
