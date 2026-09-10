@@ -12,8 +12,8 @@
 window.MY_PHOTOS = {
   FOLDER: 'assets/photos/',
   FILES: [
-    ['bear.jpg',       'ごあいさつするクマ'],
     ['keiba.jpg',      '疾走する馬たち'],
+    ['bear.jpg',       'ごあいさつするクマ'],
     ['street_cat.jpg', '街角のねこ'],
     ['hall.jpg',       'あじさいの見える廊下'],
     ['paddock.jpg',    'Lay Classic'],
