@@ -403,7 +403,7 @@
 const MP = window.MY_PHOTOS || {FOLDER:'', FILES:[]};
 const BUILTIN = MP.FILES.map(([f,n])=>({name:n, src:encodeURI(MP.FOLDER+f)}));
 const MAX_PX = 1400;       // 取り込む画像の長辺（最初の16枚と同じ基準）
-const APP_VERSION = 'v31'; // 画面右上に出る版数。sw.js の VERSION と合わせること
+const APP_VERSION = 'v32'; // 画面右上に出る版数。sw.js の VERSION と合わせること
 const LEVEL_DEFAULT = '5';  // 初期の難易度（ふつう＝約25ピース）。#level の選択肢の値と合わせる
 const SNAP_RATIO = 0.42;   // 吸着距離（ピース短辺に対する割合）
 const TAB_MARGIN = 0.34;   // タブの飛び出しぶんの余白
@@ -1686,11 +1686,10 @@ document.getElementById('bResume').addEventListener('click',async e=>{
     newGame(r.state);
   }catch(err){
     // 続きを組み立て直せなかったときに、何も起きないままにしない。
-    // 理由を出したうえで、その絵で新しく始める。
+    // ただし保存データは消さない（消すと復旧できなくなるため）。
     console.error('resume failed', err);
     toast('続きを読み込めませんでした：'+((err&&err.message)||err));
-    clearSave(); showResumeCard();
-    try{ newGame(); }catch(_){ }
+    showResumeCard();
   }
 });
 document.getElementById('bDiscard').addEventListener('click',e=>{
